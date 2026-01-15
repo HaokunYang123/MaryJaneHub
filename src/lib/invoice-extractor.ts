@@ -1,7 +1,7 @@
 import { visionModel } from '@/lib/gemini';
 
 export interface AIAnalysisResult {
-  isFinancial: boolean; // <--- NEW FLAG
+  isFinancial: boolean;
   summary: string;
   filingCategory: string;
   confidence: number;
@@ -13,7 +13,7 @@ export interface AIAnalysisResult {
   };
 }
 
-// Legacy interface for backward compatibility
+// Legacy interface
 export interface ExtractedInvoice {
   vendorName: string;
   invoiceNumber: string;
@@ -30,53 +30,62 @@ export interface ExtractedInvoice {
   taxClass: "COGS - Deductible" | "OpEx - Non-Deductible";
 }
 
-export interface InvoiceData {
-  vendorName: string;
-  amount: number;
-  date: string;
-  dueDate: string;
-  items: Array<{ description: string; amount: number }>;
-  taxClass: "COGS - Deductible" | "OpEx - Non-Deductible";
-}
-
-// Helper to parse PDF buffer
-export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  const pdfModule = await import('pdf-parse');
-  const PDFParse = (pdfModule as { PDFParse?: unknown }).PDFParse;
-
-  if (typeof PDFParse !== 'function') {
-    throw new Error('PDFParse class not found in pdf-parse module');
+// --- FIX: Robust PDF Parser Import ---
+// This function safely handles the import whether it comes as .default or not
+const getPdfParser = async () => {
+  try {
+    const pdfModule = await import('pdf-parse');
+    
+    // Scenario 1: It's under .default (Common in Next.js)
+    if (pdfModule.default && typeof pdfModule.default === 'function') {
+      return pdfModule.default;
+    }
+    // Scenario 2: It IS the module (Common in Node)
+    if (typeof pdfModule === 'function') {
+      return pdfModule;
+    }
+    
+    // Scenario 3: Fallback to require (Last resort)
+    const required = require('pdf-parse');
+    if (typeof required === 'function') {
+      return required;
+    }
+    
+    // If all else fails, throw a clear error
+    throw new Error(`pdf-parse is not a function. Type: ${typeof pdfModule}`);
+  } catch (error) {
+    console.error("❌ PDF Parser Import Failed:", error);
+    throw error;
   }
+};
 
-  // pdf-parse v2+ exposes a PDFParse class
-  const parser = new (PDFParse as new (opts: { data: Buffer }) => {
-    getText: () => Promise<{ text: string }>;
-    destroy: () => Promise<void>;
-  })({ data: buffer });
-
-  const textResult = await parser.getText();
-  await parser.destroy();
-
-  return textResult.text;
+export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
+  try {
+    // USE THE HELPER HERE
+    const pdfParse = await getPdfParser();
+    const data = await pdfParse(buffer);
+    return data.text;
+  } catch (error) {
+    console.error("⚠️ PDF Text Extraction Failed:", error);
+    // Return empty string so the app DOES NOT CRASH. 
+    // The AI will just try to analyze the filename instead.
+    return ""; 
+  }
 }
+
+// --- End of Fix ---
 
 /**
- * Smart AI Analysis - Behaves differently based on source
- * @param text - Document text content
- * @param source - 'web' (aggressive) or 'drive' (cautious)
+ * Smart AI Analysis
  */
 export async function analyzeAndCategorize(text: string, source: 'web' | 'drive'): Promise<AIAnalysisResult> {
   
-  // A. AGGRESSIVE MODE (For Website Uploads)
-  // We assume it's a bill because Mary clicked "Upload" on the dashboard.
   let specificInstructions = `
     CONTEXT: The user explicitly uploaded this to the Accounting Dashboard. 
     Assume it is an invoice, receipt, or financial document. 
     Find the best possible match for Vendor and Amount.
   `;
 
-  // B. CAUTIOUS MODE (For Background Drive Files)
-  // We have no idea what this is. It could be a permit, a contract, or a cat photo.
   if (source === 'drive') {
     specificInstructions = `
       CONTEXT: This file was found in a Google Drive folder.
@@ -123,7 +132,6 @@ export async function analyzeAndCategorize(text: string, source: 'web' | 'drive'
     return JSON.parse(cleaned);
   } catch (e) {
     console.error("AI Analysis Failed", e);
-    // Fallback for errors
     return { 
       isFinancial: false, 
       summary: "Analysis Failed", 
@@ -134,9 +142,6 @@ export async function analyzeAndCategorize(text: string, source: 'web' | 'drive'
   }
 }
 
-/**
- * Legacy function for invoice extraction (backward compatibility)
- */
 export async function extractInvoiceData(text: string): Promise<ExtractedInvoice> {
   const prompt = `
     Analyze this invoice text and extract the following JSON data.
@@ -166,13 +171,9 @@ export async function extractInvoiceData(text: string): Promise<ExtractedInvoice
 
   try {
     const result = await visionModel.generateContent(prompt);
-    const response = result.response;
-    let responseText = response.text();
-    
-    // Clean up markdown code blocks if Gemini adds them
-    responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    return JSON.parse(responseText) as ExtractedInvoice;
+    const response = result.response.text();
+    const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleaned) as ExtractedInvoice;
   } catch (error) {
     console.error("Gemini Extraction Error:", error);
     throw new Error("Failed to extract data from invoice");
