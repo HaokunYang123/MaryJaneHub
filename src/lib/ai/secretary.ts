@@ -7,17 +7,18 @@ import { supabase } from '@/lib/supabase';
 
 /**
  * PHASE 1: ANALYZE & HOLD
- * Analyzes the file with context-aware AI
+ * Analyzes the file with context-aware AI using Gemini Vision
  */
 export async function analyzeUploadedFile(
   fileId: string, 
-  fileContent: string, 
+  fileBuffer: Buffer,
+  mimeType: string,
   source: 'web' | 'drive' = 'web'
 ) {
-  console.log(`🕵️‍♂️ Analyzing file: ${fileId} (Source: ${source})`);
+  console.log(`🕵️‍♂️ Analyzing file: ${fileId} (Source: ${source}, Type: ${mimeType})`);
 
-  // 1. Run AI Analysis
-  const analysis: AIAnalysisResult = await analyzeAndCategorize(fileContent, source);
+  // 1. Run AI Analysis with Gemini Vision (sends file directly)
+  const analysis: AIAnalysisResult = await analyzeAndCategorize(fileBuffer, mimeType, source);
 
   // 2. Handle Non-Financial Files (Drive source only)
   if (!analysis.isFinancial && source === 'drive') {
@@ -34,7 +35,7 @@ export async function analyzeUploadedFile(
       .from('documents')
       .insert({
         drive_id: fileId,
-        content: fileContent,
+        content: analysis.summary, // Store AI summary instead of raw content
         metadata: analysis,
         category: analysis.filingCategory,
         status: 'archived',
@@ -83,7 +84,7 @@ export async function analyzeUploadedFile(
     .from('documents')
     .insert({
       drive_id: fileId,
-      content: fileContent,
+      content: analysis.summary, // Store AI summary instead of raw content
       metadata: analysis,
       category: analysis.filingCategory,
       status: 'needs_review',

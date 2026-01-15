@@ -30,55 +30,25 @@ export interface ExtractedInvoice {
   taxClass: "COGS - Deductible" | "OpEx - Non-Deductible";
 }
 
-// --- FIX: Robust PDF Parser Import ---
-// This function safely handles the import whether it comes as .default or not
-const getPdfParser = async () => {
-  try {
-    const pdfModule = await import('pdf-parse');
-    
-    // Scenario 1: It's under .default (Common in Next.js)
-    if (pdfModule.default && typeof pdfModule.default === 'function') {
-      return pdfModule.default;
-    }
-    // Scenario 2: It IS the module (Common in Node)
-    if (typeof pdfModule === 'function') {
-      return pdfModule;
-    }
-    
-    // Scenario 3: Fallback to require (Last resort)
-    const required = require('pdf-parse');
-    if (typeof required === 'function') {
-      return required;
-    }
-    
-    // If all else fails, throw a clear error
-    throw new Error(`pdf-parse is not a function. Type: ${typeof pdfModule}`);
-  } catch (error) {
-    console.error("❌ PDF Parser Import Failed:", error);
-    throw error;
-  }
-};
-
-export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  try {
-    // USE THE HELPER HERE
-    const pdfParse = await getPdfParser();
-    const data = await pdfParse(buffer);
-    return data.text;
-  } catch (error) {
-    console.error("⚠️ PDF Text Extraction Failed:", error);
-    // Return empty string so the app DOES NOT CRASH. 
-    // The AI will just try to analyze the filename instead.
-    return ""; 
-  }
+// --- GEMINI VISION: Convert Buffer to Base64 for the API ---
+function fileToGenerativePart(buffer: Buffer, mimeType: string) {
+  return {
+    inlineData: {
+      data: buffer.toString("base64"),
+      mimeType
+    },
+  };
 }
 
-// --- End of Fix ---
-
 /**
- * Smart AI Analysis
+ * Smart AI Analysis using Gemini Vision
+ * Sends the raw file buffer directly to Gemini - works on scanned PDFs!
  */
-export async function analyzeAndCategorize(text: string, source: 'web' | 'drive'): Promise<AIAnalysisResult> {
+export async function analyzeAndCategorize(
+  fileBuffer: Buffer,
+  mimeType: string,
+  source: 'web' | 'drive'
+): Promise<AIAnalysisResult> {
   
   let specificInstructions = `
     CONTEXT: The user explicitly uploaded this to the Accounting Dashboard. 
@@ -102,7 +72,7 @@ export async function analyzeAndCategorize(text: string, source: 'web' | 'drive'
   }
 
   const prompt = `
-    You are an expert executive assistant. Analyze this document text.
+    You are an expert executive assistant. Analyze this document.
     ${specificInstructions}
 
     1. CATEGORIZE for filing: ["Property Repairs", "Inventory", "Legal", "Utilities", "Rent", "Payroll", "Administrative", "Uncategorized"]
@@ -120,13 +90,13 @@ export async function analyzeAndCategorize(text: string, source: 'web' | 'drive'
         "description": "String"
       }
     }
-
-    Document Text:
-    ${text.substring(0, 5000)}
   `;
 
   try {
-    const result = await visionModel.generateContent(prompt);
+    // Send both the prompt AND the file directly to Gemini Vision
+    const imagePart = fileToGenerativePart(fileBuffer, mimeType);
+    const result = await visionModel.generateContent([prompt, imagePart]);
+    
     const response = result.response.text();
     const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleaned);
@@ -142,9 +112,15 @@ export async function analyzeAndCategorize(text: string, source: 'web' | 'drive'
   }
 }
 
-export async function extractInvoiceData(text: string): Promise<ExtractedInvoice> {
+/**
+ * Extract detailed invoice data using Gemini Vision
+ */
+export async function extractInvoiceData(
+  fileBuffer: Buffer,
+  mimeType: string
+): Promise<ExtractedInvoice> {
   const prompt = `
-    Analyze this invoice text and extract the following JSON data.
+    Analyze this invoice document and extract the following JSON data.
     
     Rules for 'taxClass':
     - If the vendor sells cultivation supplies, seeds, nutrients, packaging, or direct production equipment, set taxClass to "COGS - Deductible".
@@ -164,18 +140,33 @@ export async function extractInvoiceData(text: string): Promise<ExtractedInvoice
       "suggestedCategory": "string",
       "taxClass": "string"
     }
-
-    Invoice Text:
-    ${text.substring(0, 3000)}
   `;
 
   try {
-    const result = await visionModel.generateContent(prompt);
+    const imagePart = fileToGenerativePart(fileBuffer, mimeType);
+    const result = await visionModel.generateContent([prompt, imagePart]);
+    
     const response = result.response.text();
     const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleaned) as ExtractedInvoice;
   } catch (error) {
     console.error("Gemini Extraction Error:", error);
     throw new Error("Failed to extract data from invoice");
+  }
+}
+
+// Legacy text extraction - kept as fallback but no longer primary
+export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
+  try {
+    const pdfModule = await import('pdf-parse');
+    const pdfParse = pdfModule.default || pdfModule;
+    if (typeof pdfParse === 'function') {
+      const data = await pdfParse(buffer);
+      return data.text;
+    }
+    return "";
+  } catch (error) {
+    console.error("⚠️ PDF Text Extraction Failed (using vision instead):", error);
+    return "";
   }
 }
