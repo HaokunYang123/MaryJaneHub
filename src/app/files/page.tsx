@@ -240,25 +240,30 @@ function ReviewCard({
 }) {
   const analysis = doc.metadata;
   const isDuplicate = doc.is_duplicate;
-  const [isExpanded, setIsExpanded] = useState(false);
+
+  const vendorName = analysis?.data?.vendorName || "Unknown Vendor";
+  const amount = analysis?.data?.amount || 0;
+  const description = analysis?.data?.description || "services";
+
+  // Custom sentence construction for the summary
+  const customSummary = `Invoice from ${vendorName} for ${description} and it is being sent to QuickBooks for book keeping.`;
+
+  // Display path for Drive
+  const drivePath = `Drive/Invoices/${analysis?.category || 'General'}`;
 
   return (
     <Card className={`p-5 border-l-4 ${isDuplicate ? 'border-l-red-500 bg-red-50/30' : 'border-l-[#1B5E20]'} shadow-sm hover:shadow-md transition-shadow`}>
 
       {/* Card Header */}
       <div className="flex justify-between items-start mb-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 w-full min-w-0">
           <div className="h-10 w-10 bg-white rounded-full flex items-center justify-center border shadow-sm shrink-0">
             <span className="material-symbols-outlined text-slate-600">description</span>
           </div>
-          <div className="min-w-0">
-            <p
-              className={`font-semibold text-slate-900 cursor-pointer transition-all ${isExpanded ? 'whitespace-normal break-words' : 'truncate max-w-[150px]'
-                }`}
-              onClick={() => setIsExpanded(!isExpanded)}
-              title={isExpanded ? "Click to collapse" : "Click to expand"}
-            >
-              {analysis?.data?.vendorName || "Unknown Vendor"}
+          <div className="min-w-0 flex-1">
+            {/* Vendor Name: Displays full name, truncates ONLY if it overflows the card width */}
+            <p className="font-semibold text-slate-900 truncate" title={vendorName}>
+              {vendorName}
             </p>
             <p className="text-xs text-slate-500">
               {new Date(doc.created_at).toLocaleDateString()}
@@ -266,7 +271,7 @@ function ReviewCard({
           </div>
         </div>
         {isDuplicate && (
-          <Badge variant="destructive" className="bg-red-100 text-red-700 border-red-200 shrink-0">
+          <Badge variant="destructive" className="bg-red-100 text-red-700 border-red-200 shrink-0 ml-2">
             Duplicate
           </Badge>
         )}
@@ -277,25 +282,29 @@ function ReviewCard({
         <div className="flex justify-between items-center">
           <span className="text-slate-500">Amount</span>
           <span className="font-bold text-[#1B5E20] text-lg">
-            ${analysis?.data?.amount?.toFixed(2) || '0.00'}
+            ${amount.toFixed(2)}
           </span>
         </div>
+
+        {/* Changed from "Destination" to "Category" as requested, showing path */}
         <div className="flex justify-between items-center">
-          <span className="text-slate-500">Destination</span>
-          <Badge variant="outline" className="text-xs font-normal" title="Will move here on Confirm">
-            Drive/Invoices/{analysis?.category || 'General'}
+          <span className="text-slate-500">Category</span>
+          <Badge variant="outline" className="text-xs font-normal max-w-[150px] truncate" title={drivePath}>
+            {drivePath}
           </Badge>
         </div>
+
         <div className="flex justify-between items-center">
           <span className="text-slate-500">Date</span>
           <span className="text-slate-700">{analysis?.data?.date || 'N/A'}</span>
         </div>
+        {/* Confidence score removed */}
       </div>
 
-      {/* Summary */}
-      {analysis?.summary && (
-        <p className="text-xs text-slate-600 mb-4 line-clamp-2">{analysis.summary}</p>
-      )}
+      {/* Custom Sentence Summary */}
+      <p className="text-xs text-slate-600 mb-4 line-clamp-3 leading-relaxed">
+        {customSummary}
+      </p>
 
       {/* Actions */}
       <div className="space-y-3 pt-2">
