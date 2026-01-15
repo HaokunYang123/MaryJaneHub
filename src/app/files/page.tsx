@@ -57,25 +57,35 @@ export default function FilesPage() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0]) return;
+    
+    const file = e.target.files[0];
     setIsUploading(true);
 
     const formData = new FormData();
-    formData.append('file', e.target.files[0]);
+    formData.append('file', file);
 
     try {
-      const res = await fetch('/api/files/upload', { method: 'POST', body: formData });
-      if (res.ok) {
-        await fetchPendingDocs(); // Refresh list
-      } else {
-        const error = await res.json();
-        console.error("Upload failed:", error);
+      // FIX: Do NOT set Content-Type header manually for FormData!
+      // The browser automatically generates it with a special "boundary" string
+      const res = await fetch('/api/files/upload', {
+        method: 'POST',
+        body: formData, 
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Upload failed");
       }
+
+      // Success! Refresh the list
+      await fetchPendingDocs();
+      
     } catch (error) {
-      console.error("Upload failed", error);
+      console.error("Upload Error:", error);
+      alert("Upload failed. Check console for details.");
     } finally {
       setIsUploading(false);
-      // Reset the input
-      e.target.value = '';
+      e.target.value = ''; // Reset input
     }
   };
 

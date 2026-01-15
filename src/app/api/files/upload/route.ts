@@ -1,51 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeUploadedFile } from '@/lib/ai/secretary';
+import { uploadFileToDrive } from '@/lib/google-drive';
 
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File;
-    
+
     if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    // Generate a mock Drive ID (in production, upload to Google Drive first)
-    const driveId = "drive_" + Date.now() + "_" + file.name.replace(/\s/g, '_');
-    
-    // Extract text from file
-    let text = '';
+    console.log(`📥 Receiving file: ${file.name}`);
+
+    // 1. Upload to Google Drive
+    // This puts it in a folder named "Inbox"
+    const driveId = await uploadFileToDrive(file, "Inbox");
+
+    if (!driveId) {
+      throw new Error("Drive upload failed");
+    }
+
+    // 2. Extract text for AI analysis
+    let textContext = `File Name: ${file.name}`;
     
     if (file.type === 'application/pdf') {
-      // For PDF files, use pdf-parse
-      const buffer = Buffer.from(await file.arrayBuffer());
       try {
+        const buffer = Buffer.from(await file.arrayBuffer());
         const pdfParse = (await import('pdf-parse')).default;
         const pdfData = await pdfParse(buffer);
-        text = pdfData.text;
-      } catch {
-        text = `PDF Document: ${file.name}`;
+        textContext = pdfData.text || textContext;
+      } catch (pdfError) {
+        console.log('PDF parse failed, using filename:', pdfError);
       }
-    } else if (file.type.startsWith('image/')) {
-      // For images, we'd use OCR - for now use placeholder
-      text = `Image Document: ${file.name}`;
-    } else {
-      // For text files
-      text = await file.text();
+    } else if (!file.type.startsWith('image/')) {
+      // For text files, read content
+      try {
+        textContext = await file.text();
+      } catch {
+        // Keep filename as context
+      }
     }
 
-    // If no text extracted, use filename as context
-    if (!text.trim()) {
-      text = `Document uploaded: ${file.name}`;
-    }
+    // 3. Trigger AI Analysis
+    // 'web' means we assume it's financial because it came from the dashboard
+    const result = await analyzeUploadedFile(driveId, textContext, 'web');
 
-    // 3. Trigger Secretary Analysis
-    // EXPLICITLY PASS 'web' - User clicked upload on dashboard = assume financial
-    const result = await analyzeUploadedFile(driveId, text, 'web');
-    
     return NextResponse.json(result);
+
   } catch (error) {
-    console.error('Upload Error:', error);
+    console.error("API Error:", error);
     const message = error instanceof Error ? error.message : 'Upload failed';
     return NextResponse.json({ error: message }, { status: 500 });
   }
