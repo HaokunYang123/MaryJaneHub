@@ -1,16 +1,33 @@
 // The "Secretary" - Business logic for Trust but Verify workflow
-// Handles Phase 1 (Analyze & Hold) and Phase 2 (Execute on Confirm)
-// Uses Google Drive for file storage + Supabase for metadata
+// Uses Supabase if configured, falls back to local JSON storage
 
 import { analyzeAndCategorize, AIAnalysisResult } from '@/lib/invoice-extractor';
-import { supabase } from '@/lib/supabase';
 import { moveFileToFolder, getFolderByStatus } from '@/lib/google-drive';
+import { 
+  insertDocument, 
+  getDocumentsByStatus, 
+  getDocumentById, 
+  updateDocumentStatus,
+  checkDuplicate,
+  LocalDocument 
+} from '@/lib/local-storage';
+
+// Check if Supabase is configured
+const SUPABASE_CONFIGURED = !!(
+  process.env.NEXT_PUBLIC_SUPABASE_URL && 
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// Dynamic import of supabase only if configured
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let supabase: any = null;
+if (SUPABASE_CONFIGURED) {
+  import('@/lib/supabase').then(m => { supabase = m.supabase; });
+}
 
 /**
  * PHASE 1: ANALYZE & HOLD
  * Analyzes the file with context-aware AI
- * - 'web' source: Aggressive mode (assume financial)
- * - 'drive' source: Cautious mode (check if financial first)
  */
 export async function analyzeUploadedFile(
   fileId: string, 
@@ -19,123 +36,140 @@ export async function analyzeUploadedFile(
 ) {
   console.log(`🕵️‍♂️ Analyzing file: ${fileId} (Source: ${source})`);
 
-  // 1. Run AI with the Source Context
+  // 1. Run AI Analysis
   const analysis: AIAnalysisResult = await analyzeAndCategorize(fileContent, source);
 
-  // 2. LOGIC FOR NON-FINANCIAL FILES (The "EIN Letter" Case)
+  // 2. Handle Non-Financial Files (Drive source only)
   if (!analysis.isFinancial && source === 'drive') {
     console.log(`📂 Non-financial file detected: ${analysis.summary}`);
     
-    // Just organize it in Drive, don't draft it for QuickBooks
     try {
       await moveFileToFolder(fileId, analysis.filingCategory);
     } catch (driveError) {
       console.log('Drive move skipped:', driveError);
     }
     
-    // Save to DB as "archived" just for memory (skips Review Queue)
-    try {
-      await supabase.from('documents').insert({
-        drive_id: fileId,
-        content: fileContent,
-        metadata: analysis,
-        category: analysis.filingCategory,
-        status: 'archived', // <--- Skips the Review Queue
-      });
-    } catch (dbError) {
-      console.log('DB insert skipped:', dbError);
-    }
-    
-    return { 
-      success: true, 
-      message: "Archived non-financial document",
-      analysis,
-      status: 'archived'
-    };
-  }
-
-  // 3. LOGIC FOR FINANCIAL FILES (Business as usual)
-  // Check for duplicates within last 30 days
-  let isDuplicate = false;
-  let duplicateId = null;
-
-  try {
-    const { data: duplicates } = await supabase
-      .from('documents')
-      .select('id')
-      .filter('metadata->>vendorName', 'eq', analysis.data.vendorName)
-      .filter('metadata->>amount', 'eq', String(analysis.data.amount))
-      .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
-
-    isDuplicate = duplicates && duplicates.length > 0;
-    duplicateId = isDuplicate ? duplicates![0].id : null;
-  } catch (error) {
-    console.log('Duplicate check skipped:', error);
-  }
-
-  // 4. Save to DB for Review
-  try {
-    const { data, error } = await supabase
-      .from('documents')
-      .insert({
-        drive_id: fileId,
-        content: fileContent,
-        metadata: analysis,
-        category: analysis.filingCategory,
-        status: 'needs_review',
-        is_duplicate: isDuplicate,
-        duplicate_of_id: duplicateId
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("DB Insert Error:", error);
-      return {
-        id: `mock_${Date.now()}`,
-        drive_id: fileId,
-        content: fileContent,
-        metadata: analysis,
-        category: analysis.filingCategory,
-        status: 'needs_review',
-        is_duplicate: isDuplicate,
-        created_at: new Date().toISOString()
-      };
-    }
-    
-    console.log(`✅ Document saved: needs_review, isDuplicate: ${isDuplicate}`);
-    return data;
-  } catch (error) {
-    console.log('Supabase not configured, returning mock data');
-    return {
-      id: `mock_${Date.now()}`,
+    // Save as archived
+    const doc = saveDocument({
       drive_id: fileId,
       content: fileContent,
       metadata: analysis,
       category: analysis.filingCategory,
-      status: 'needs_review',
-      is_duplicate: isDuplicate,
-      created_at: new Date().toISOString()
+      status: 'archived',
+      is_duplicate: false,
+      duplicate_of_id: null,
+    });
+    
+    return { 
+      success: true, 
+      message: "Archived non-financial document",
+      ...doc,
+      status: 'archived'
     };
   }
+
+  // 3. Check for duplicates
+  let isDuplicate = false;
+  let duplicateId: string | null = null;
+
+  if (SUPABASE_CONFIGURED && supabase) {
+    try {
+      const { data: duplicates } = await supabase
+        .from('documents')
+        .select('id')
+        .filter('metadata->>vendorName', 'eq', analysis.data.vendorName)
+        .filter('metadata->>amount', 'eq', String(analysis.data.amount))
+        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+
+      isDuplicate = duplicates && duplicates.length > 0;
+      duplicateId = isDuplicate ? duplicates![0].id : null;
+    } catch (error) {
+      console.log('Duplicate check failed:', error);
+    }
+  } else {
+    // Use local storage for duplicate check
+    const dupe = checkDuplicate(analysis.data.vendorName, analysis.data.amount);
+    isDuplicate = !!dupe;
+    duplicateId = dupe?.id || null;
+  }
+
+  // 4. Save Document
+  const savedDoc = saveDocument({
+    drive_id: fileId,
+    content: fileContent,
+    metadata: analysis,
+    category: analysis.filingCategory,
+    status: 'needs_review',
+    is_duplicate: isDuplicate,
+    duplicate_of_id: duplicateId,
+  });
+
+  console.log(`✅ Document saved: ${savedDoc.id}, isDuplicate: ${isDuplicate}`);
+  return savedDoc;
+}
+
+/**
+ * Save document to Supabase or local storage
+ */
+function saveDocument(data: {
+  drive_id: string;
+  content: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  metadata: any;
+  category: string;
+  status: 'needs_review' | 'processed' | 'rejected' | 'archived';
+  is_duplicate: boolean;
+  duplicate_of_id: string | null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+}): any {
+  if (SUPABASE_CONFIGURED && supabase) {
+    // Try Supabase first
+    try {
+      const result = supabase
+        .from('documents')
+        .insert(data)
+        .select()
+        .single();
+      
+      if (result.data) return result.data;
+    } catch (error) {
+      console.log('Supabase save failed, using local storage:', error);
+    }
+  }
+
+  // Fall back to local storage
+  console.log('📁 Using local file storage');
+  return insertDocument(data);
 }
 
 /**
  * PHASE 2: EXECUTE
  * Triggered ONLY when Mary clicks "Confirm"
- * Moves file in Drive + Updates Supabase status
  */
 export async function confirmAndExecute(documentId: string) {
-  console.log(`🚀 Executing confirmation for document: ${documentId}`);
+  console.log(`🚀 Confirming document: ${documentId}`);
   
-  // 1. Fetch the Draft from Supabase
-  const { data: doc, error: fetchError } = await supabase
-    .from('documents')
-    .select('*')
-    .eq('id', documentId)
-    .single();
+  // Get document
+  let doc: LocalDocument | null = null;
+  
+  if (SUPABASE_CONFIGURED && supabase) {
+    try {
+      const { data } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('id', documentId)
+        .single();
+      doc = data;
+    } catch {
+      // Fall back to local
+    }
+  }
+  
+  if (!doc) {
+    doc = getDocumentById(documentId);
+  }
 
-  if (fetchError || !doc) {
+  if (!doc) {
     throw new Error("Document not found");
   }
   
@@ -146,32 +180,26 @@ export async function confirmAndExecute(documentId: string) {
   const analysis = doc.metadata as AIAnalysisResult;
 
   try {
-    // 2. Move file in Google Drive to "Processed" folder
+    // Move file in Drive
     try {
       await getFolderByStatus('processed');
       await moveFileToFolder(doc.drive_id, `Mary - Processed/${analysis.filingCategory}`);
-      console.log(`📁 Moved file ${doc.drive_id} to Processed folder`);
+      console.log(`📁 Moved file to Processed folder`);
     } catch (driveError) {
-      console.log('Google Drive move skipped:', driveError);
+      console.log('Drive move skipped:', driveError);
     }
 
-    // 3. Here you would also sync to QuickBooks
-    console.log(`📊 Would create QuickBooks entry for: $${analysis.data.amount} to ${analysis.data.vendorName}`);
-
-    // 4. Update Supabase Status to 'processed'
-    const { error: updateError } = await supabase
-      .from('documents')
-      .update({ 
-        status: 'processed', 
-        processed_at: new Date().toISOString() 
-      })
-      .eq('id', documentId);
-
-    if (updateError) {
-      throw new Error(`Failed to update status: ${updateError.message}`);
+    // Update status
+    if (SUPABASE_CONFIGURED && supabase) {
+      await supabase
+        .from('documents')
+        .update({ status: 'processed', processed_at: new Date().toISOString() })
+        .eq('id', documentId);
+    } else {
+      updateDocumentStatus(documentId, 'processed');
     }
 
-    console.log(`✅ Document ${documentId} marked as processed`);
+    console.log(`✅ Document ${documentId} processed`);
     return { success: true, analysis };
 
   } catch (error) {
@@ -182,37 +210,45 @@ export async function confirmAndExecute(documentId: string) {
 
 /**
  * Reject a document
- * Moves file in Drive to Rejected folder + Updates Supabase
  */
 export async function rejectDocument(documentId: string) {
-  // 1. Fetch doc
-  const { data: doc } = await supabase
-    .from('documents')
-    .select('drive_id')
-    .eq('id', documentId)
-    .single();
+  // Get document for drive_id
+  let doc: LocalDocument | null = null;
+  
+  if (SUPABASE_CONFIGURED && supabase) {
+    try {
+      const { data } = await supabase
+        .from('documents')
+        .select('drive_id')
+        .eq('id', documentId)
+        .single();
+      doc = data;
+    } catch {
+      // Fall back
+    }
+  }
+  
+  if (!doc) {
+    doc = getDocumentById(documentId);
+  }
 
-  // 2. Move in Drive
+  // Move in Drive
   if (doc?.drive_id) {
     try {
       await moveFileToFolder(doc.drive_id, 'Mary - Rejected');
-      console.log(`📁 Moved file to Rejected folder`);
     } catch (driveError) {
-      console.log('Google Drive move skipped:', driveError);
+      console.log('Drive move skipped:', driveError);
     }
   }
 
-  // 3. Update Supabase
-  const { error } = await supabase
-    .from('documents')
-    .update({ 
-      status: 'rejected', 
-      processed_at: new Date().toISOString() 
-    })
-    .eq('id', documentId);
-
-  if (error) {
-    throw new Error(`Failed to reject document: ${error.message}`);
+  // Update status
+  if (SUPABASE_CONFIGURED && supabase) {
+    await supabase
+      .from('documents')
+      .update({ status: 'rejected', processed_at: new Date().toISOString() })
+      .eq('id', documentId);
+  } else {
+    updateDocumentStatus(documentId, 'rejected');
   }
 
   return { success: true };
@@ -222,16 +258,21 @@ export async function rejectDocument(documentId: string) {
  * Get all documents needing review
  */
 export async function getPendingDocuments() {
-  const { data, error } = await supabase
-    .from('documents')
-    .select('*')
-    .eq('status', 'needs_review')
-    .order('created_at', { ascending: false });
+  if (SUPABASE_CONFIGURED && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('status', 'needs_review')
+        .order('created_at', { ascending: false });
 
-  if (error) {
-    console.error('Failed to fetch documents:', error);
-    return [];
+      if (!error && data) return data;
+    } catch (error) {
+      console.log('Supabase fetch failed:', error);
+    }
   }
 
-  return data || [];
+  // Fall back to local storage
+  console.log('📁 Fetching from local storage');
+  return getDocumentsByStatus('needs_review');
 }
