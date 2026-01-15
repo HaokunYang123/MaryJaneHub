@@ -49,7 +49,7 @@ export async function analyzeAndCategorize(
   mimeType: string,
   source: 'web' | 'drive'
 ): Promise<AIAnalysisResult> {
-  
+
   let specificInstructions = `
     CONTEXT: The user explicitly uploaded this to the Accounting Dashboard. 
     Assume it is an invoice, receipt, or financial document. 
@@ -75,12 +75,25 @@ export async function analyzeAndCategorize(
     You are an expert executive assistant. Analyze this document.
     ${specificInstructions}
 
-    1. CATEGORIZE for filing: ["Property Repairs", "Inventory", "Legal", "Utilities", "Rent", "Payroll", "Administrative", "Uncategorized"]
+    1. CATEGORIZATION RULES:
+       - "Property Repairs": For AC repair, plumbing, or structural fixes.
+       - "Inventory": For seeds, nutrients, or wholesale goods.
+       - "Utilities": For electric, gas, or internet.
+       - "Administrative": For general documents, permits, or notices.
+       - "Legal": For contracts, agreements, or legal documents.
+       - "Rent": For lease or property payments.
+       - "Payroll": For employee wages or benefits.
+       - NEVER prefix the category with "Mary" or "Mary's". Return only the clean category.
+
+    2. PRICE/AMOUNT RULES:
+       - If a total amount is visible, extract it as a number.
+       - If NO PRICE is found (e.g., it is a contract, permit, or photo), return 0.
+       - In the "summary" field, if the price is 0, explain why (e.g., "Non-financial permit for site access").
     
     Return ONLY raw JSON:
     {
       "isFinancial": boolean,
-      "summary": "Short 1-sentence summary",
+      "summary": "Short 1-sentence summary (if amount is 0, explain why)",
       "filingCategory": "String",
       "confidence": number (0.0 to 1.0),
       "data": {
@@ -96,18 +109,18 @@ export async function analyzeAndCategorize(
     // Send both the prompt AND the file directly to Gemini Vision
     const imagePart = fileToGenerativePart(fileBuffer, mimeType);
     const result = await visionModel.generateContent([prompt, imagePart]);
-    
+
     const response = result.response.text();
     const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleaned);
   } catch (e) {
     console.error("AI Analysis Failed", e);
-    return { 
-      isFinancial: false, 
-      summary: "Analysis Failed", 
-      filingCategory: "Uncategorized", 
-      confidence: 0, 
-      data: { vendorName: "", amount: 0, date: "", description: "" } 
+    return {
+      isFinancial: false,
+      summary: "Analysis Failed",
+      filingCategory: "Uncategorized",
+      confidence: 0,
+      data: { vendorName: "", amount: 0, date: "", description: "" }
     };
   }
 }
@@ -145,7 +158,7 @@ export async function extractInvoiceData(
   try {
     const imagePart = fileToGenerativePart(fileBuffer, mimeType);
     const result = await visionModel.generateContent([prompt, imagePart]);
-    
+
     const response = result.response.text();
     const cleaned = response.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleaned) as ExtractedInvoice;

@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase';
  * Analyzes the file with context-aware AI using Gemini Vision
  */
 export async function analyzeUploadedFile(
-  fileId: string, 
+  fileId: string,
   fileBuffer: Buffer,
   mimeType: string,
   source: 'web' | 'drive' = 'web'
@@ -23,13 +23,13 @@ export async function analyzeUploadedFile(
   // 2. Handle Non-Financial Files (Drive source only)
   if (!analysis.isFinancial && source === 'drive') {
     console.log(`📂 Non-financial file detected: ${analysis.summary}`);
-    
+
     try {
       await moveFileToFolder(fileId, analysis.filingCategory);
     } catch (driveError) {
       console.log('Drive move skipped:', driveError);
     }
-    
+
     // Save as archived
     const { data: doc, error } = await supabase
       .from('documents')
@@ -48,9 +48,9 @@ export async function analyzeUploadedFile(
     if (error) {
       throw new Error(`Supabase insert failed: ${error.message}`);
     }
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       message: "Archived non-financial document",
       ...(doc ?? {}),
       status: 'archived'
@@ -108,7 +108,7 @@ export async function analyzeUploadedFile(
  */
 export async function confirmAndExecute(documentId: string) {
   console.log(`🚀 Confirming document: ${documentId}`);
-  
+
   // Get document
   const { data: doc, error: fetchError } = await supabase
     .from('documents')
@@ -119,7 +119,7 @@ export async function confirmAndExecute(documentId: string) {
   if (fetchError || !doc) {
     throw new Error(fetchError?.message || "Document not found");
   }
-  
+
   if (doc.status === 'processed') {
     throw new Error("Document already processed");
   }
@@ -128,10 +128,13 @@ export async function confirmAndExecute(documentId: string) {
 
   try {
     // Move file in Drive
+    // This now uses the clean category (e.g., "Property Repairs") 
+    // instead of adding "Mary" in front of it.
     try {
       await getFolderByStatus('processed');
-      await moveFileToFolder(doc.drive_id, `Mary - Processed/${analysis.filingCategory}`);
-      console.log(`📁 Moved file to Processed folder`);
+      const folderPath = `Processed/${analysis.filingCategory}`;
+      await moveFileToFolder(doc.drive_id, folderPath);
+      console.log(`📁 Moved file to ${folderPath}`);
     } catch (driveError) {
       console.log('Drive move skipped:', driveError);
     }
