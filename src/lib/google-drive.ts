@@ -2,14 +2,13 @@ import { google } from 'googleapis';
 import { Readable } from 'stream';
 
 // --- Configuration ---
-// Accept either variable name to be safe
 const ROOT_ID = process.env.GOOGLE_ROOT_FOLDER_ID || process.env.GOOGLE_SHARED_DRIVE_ID;
 
 const getCredentials = () => {
   try {
     const jsonKey = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
     if (!jsonKey) {
-      console.error("❌ Missing GOOGLE_SERVICE_ACCOUNT_JSON in .env.local");
+      console.error("❌ Missing GOOGLE_SERVICE_ACCOUNT_JSON");
       return {};
     }
     const credentials = JSON.parse(jsonKey);
@@ -30,44 +29,51 @@ const auth = new google.auth.GoogleAuth({
 
 const drive = google.drive({ version: 'v3', auth });
 
-// --- Helper: Find or Create Folder ---
-async function findOrCreateFolder(name: string): Promise<string> {
+// --- Helper: Find or Create Folder (Recursive for Paths) ---
+// Supports paths like "Invoices/Property Invoices"
+async function findOrCreatePath(path: string): Promise<string> {
+  const folders = path.split('/').filter(p => p.trim() !== '');
+  let parentId = ROOT_ID;
+
+  for (const folderName of folders) {
+    parentId = await findOrCreateSingleFolder(folderName, parentId);
+  }
+
+  return parentId!;
+}
+
+// Find or create a single folder within a parent
+async function findOrCreateSingleFolder(name: string, parentId?: string): Promise<string> {
   try {
-    // 1. Prepare the search query
+    // 1. Search for existing folder
     let query = `mimeType='application/vnd.google-apps.folder' and name='${name}' and trashed=false`;
-    
-    // If we have a root folder configured, make sure we only look INSIDE it
-    if (ROOT_ID) {
-      query += ` and '${ROOT_ID}' in parents`;
+    if (parentId) {
+      query += ` and '${parentId}' in parents`;
     }
 
-    // 2. Configure the list request
-    // IMPORTANT: specific "driveId" and "corpora" fields often CAUSE errors with standard folders.
-    // We only use 'supportsAllDrives' which is safe for both.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const listRequest: any = {
       q: query,
       fields: 'files(id)',
-      supportsAllDrives: true, 
+      supportsAllDrives: true,
       includeItemsFromAllDrives: true,
     };
 
     const list = await drive.files.list(listRequest);
 
     if (list.data.files && list.data.files.length > 0) {
-      // Found it!
       return list.data.files[0].id!;
     }
-    
-    // 3. Not found, so create it
-    console.log(`📁 Creating folder '${name}' inside parent '${ROOT_ID || 'Root'}'...`);
-    
+
+    // 2. Create if not found
+    console.log(`📁 Creating folder '${name}' inside '${parentId || 'Root'}'...`);
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const createRequest: any = {
-      requestBody: { 
-        name, 
+      requestBody: {
+        name,
         mimeType: 'application/vnd.google-apps.folder',
-        parents: ROOT_ID ? [ROOT_ID] : undefined
+        parents: parentId ? [parentId] : undefined
       },
       fields: 'id',
       supportsAllDrives: true,
@@ -81,10 +87,16 @@ async function findOrCreateFolder(name: string): Promise<string> {
   }
 }
 
+// Legacy helper - uses path system now
+async function findOrCreateFolder(name: string): Promise<string> {
+  return findOrCreatePath(name);
+}
+
 // --- Upload Function ---
-export async function uploadFileToDrive(file: File, folderName: string = "Inbox"): Promise<string | null> {
+export async function uploadFileToDrive(file: File, folderPath: string = "Inbox"): Promise<string | null> {
   try {
-    const folderId = await findOrCreateFolder(folderName);
+    // Now supports paths like "Inbox" or "Invoices/Property Invoices"
+    const folderId = await findOrCreatePath(folderPath);
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const stream = new Readable();
@@ -112,18 +124,22 @@ export async function uploadFileToDrive(file: File, folderName: string = "Inbox"
   }
 }
 
-// --- Other Helpers (Updated for Compatibility) ---
-
-export async function moveFileToFolder(fileId: string, folderName: string): Promise<string | null> {
+// --- Move File to Folder (Supports Nested Paths) ---
+export async function moveFileToFolder(fileId: string, folderPath: string): Promise<string | null> {
   try {
-    const folderId = await findOrCreateFolder(folderName);
-    const file = await drive.files.get({ 
-      fileId, 
+    // 1. Get destination folder ID (handles paths like "Invoices/Property Invoices")
+    const folderId = await findOrCreatePath(folderPath);
+
+    // 2. Get current parents to remove them
+    const file = await drive.files.get({
+      fileId,
       fields: 'parents',
-      supportsAllDrives: true 
+      supportsAllDrives: true
     });
-    
+
     const previousParents = file.data.parents?.join(',') || '';
+
+    // 3. Move
     await drive.files.update({
       fileId,
       addParents: folderId,
@@ -131,12 +147,16 @@ export async function moveFileToFolder(fileId: string, folderName: string): Prom
       fields: 'id, parents',
       supportsAllDrives: true,
     });
+
+    console.log(`✅ Moved file ${fileId} to ${folderPath}`);
     return folderId;
   } catch (error) {
     console.error('Drive Move Error:', error);
     return null;
   }
 }
+
+// --- Other Helpers ---
 
 export async function downloadFileFromDrive(fileId: string): Promise<string | null> {
   try {
@@ -151,11 +171,17 @@ export async function downloadFileFromDrive(fileId: string): Promise<string | nu
   }
 }
 
+// Updated Helper names - clean names, no "Mary -" prefixes
 export async function getInboxFolderId(): Promise<string | null> {
-  try { return await findOrCreateFolder('Mary - Inbox'); } catch { return null; }
+  try { return await findOrCreatePath('Inbox'); } catch { return null; }
 }
 
 export async function getFolderByStatus(status: 'pending' | 'processed' | 'rejected'): Promise<string | null> {
-  const map = { pending: 'Mary - Pending Review', processed: 'Mary - Processed', rejected: 'Mary - Rejected' };
-  try { return await findOrCreateFolder(map[status]); } catch { return null; }
+  // Clean folder names without "Mary -" prefix
+  const map = {
+    pending: 'Pending Review',
+    processed: 'Processed',
+    rejected: 'Rejected'
+  };
+  try { return await findOrCreatePath(map[status]); } catch { return null; }
 }

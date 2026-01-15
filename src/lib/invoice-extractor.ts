@@ -48,15 +48,17 @@ export interface ExtractedInvoice {
 
 // ============================================================
 // SINGLE SOURCE OF TRUTH: Allowed folder/category names
+// These map to folders inside "Invoices/" in Google Drive
 // ============================================================
 export const ALLOWED_FOLDERS = [
-  "Property Repairs",
-  "Inventory",
-  "Utilities",
-  "Legal",
-  "Payroll",
-  "Administrative",
-  "Taxes"
+  "Property Invoices",
+  "Repair Invoices",
+  "Utility Invoices",
+  "Inventory Invoices",
+  "Legal Documents",
+  "Payroll Documents",
+  "Tax Documents",
+  "Administrative"
 ] as const;
 
 export type AllowedFolder = typeof ALLOWED_FOLDERS[number];

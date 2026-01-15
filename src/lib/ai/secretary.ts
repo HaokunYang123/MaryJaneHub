@@ -182,13 +182,13 @@ export async function confirmAndExecute(documentId: string) {
 
   try {
     // Move file in Drive
-    // This now uses the clean category (e.g., "Property Repairs") 
-    // instead of adding "Mary" in front of it.
+    // Uses nested path: "Invoices/{category}" for clean organization
     try {
-      await getFolderByStatus('processed');
-      const folderPath = `Processed/${analysis.filingCategory}`;
-      await moveFileToFolder(doc.drive_id, folderPath);
-      console.log(`📁 Moved file to ${folderPath}`);
+      // Put everything under "Invoices" folder, then the specific category
+      // e.g. "Invoices/Property Invoices" or "Invoices/Utility Invoices"
+      const targetFolder = `Invoices/${analysis.filingCategory}`;
+      await moveFileToFolder(doc.drive_id, targetFolder);
+      console.log(`📁 Moved file to ${targetFolder}`);
     } catch (driveError) {
       console.log('Drive move skipped:', driveError);
     }
@@ -230,7 +230,7 @@ export async function rejectDocument(documentId: string) {
   // Move in Drive
   if (doc?.drive_id) {
     try {
-      await moveFileToFolder(doc.drive_id, 'Mary - Rejected');
+      await moveFileToFolder(doc.drive_id, 'Rejected');
     } catch (driveError) {
       console.log('Drive move skipped:', driveError);
     }

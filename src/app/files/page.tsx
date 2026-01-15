@@ -282,8 +282,8 @@ function ReviewCard({
         </div>
         <div className="flex justify-between items-center">
           <span className="text-slate-500">Destination</span>
-          <Badge variant="outline" className="text-xs font-normal">
-            Drive/{analysis?.category || 'Unknown'}
+          <Badge variant="outline" className="text-xs font-normal" title="Will move here on Confirm">
+            Drive/Invoices/{analysis?.category || 'General'}
           </Badge>
         </div>
         <div className="flex justify-between items-center">
