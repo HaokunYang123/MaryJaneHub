@@ -61,9 +61,17 @@ export class AIOrchestrator {
   private conversationHistory: Content[] = [];
   private pendingAction: PendingAction | null = null;
   private genAI: GoogleGenerativeAI;
+  private apiKey: string;
 
   constructor() {
-    this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+    // Check for API key - support both variable names
+    this.apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || '';
+    
+    if (!this.apiKey) {
+      console.warn('WARNING: No Gemini API key found. Set GEMINI_API_KEY in your .env file.');
+    }
+    
+    this.genAI = new GoogleGenerativeAI(this.apiKey);
   }
 
   // Convert our function definitions to Gemini tool format
@@ -107,6 +115,15 @@ export class AIOrchestrator {
     }
 
     try {
+      // Check API key before making request
+      if (!this.apiKey) {
+        console.error('CRITICAL: No Gemini API key configured');
+        return { 
+          text: "I'm not properly configured yet. Please add your GEMINI_API_KEY to the .env file.", 
+          action: 'error' 
+        };
+      }
+
       // Get Gemini model with function calling
       const model = this.genAI.getGenerativeModel({
         model: 'gemini-1.5-pro',
@@ -150,9 +167,25 @@ export class AIOrchestrator {
 
       return { text: responseText, action: null };
     } catch (error) {
-      console.error('AI Orchestrator Error:', error);
-      const errorText = "I'm having trouble processing that right now. Could you try again?";
-      return { text: errorText, action: 'error' };
+      // ENHANCED LOGGING - Log full error details
+      console.error('CRITICAL AI ORCHESTRATOR ERROR:', error);
+      
+      // Get detailed error message
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // In development, return the actual error for debugging
+      if (process.env.NODE_ENV === 'development') {
+        return { 
+          text: `Debug Error: ${errorMessage}`, 
+          action: 'error' 
+        };
+      }
+      
+      // In production, return friendly message
+      return { 
+        text: "I'm having trouble processing that right now. Could you try again?", 
+        action: 'error' 
+      };
     }
   }
 
