@@ -1,69 +1,77 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+// src/lib/invoice-extractor.ts
+import { visionModel } from '@/lib/gemini';
 
-const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-
-interface ExtractedInvoice {
-    vendorName: string;
-    invoiceNumber: string;
-    invoiceDate: string;
-    dueDate: string;
-    totalAmount: number;
-    lineItems: {
-        description: string;
-        quantity: number;
-        unitPrice: number;
-        amount: number;
-    }[];
-    suggestedCategory: string;
-    taxClass: 'COGS - Deductible' | 'OpEx - Non-Deductible';
+export interface InvoiceData {
+  vendorName: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  dueDate: string; // YYYY-MM-DD
+  items: Array<{ description: string; amount: number }>;
+  taxClass: "COGS - Deductible" | "OpEx - Non-Deductible";
 }
 
-function getModel() {
-    if (!process.env.GEMINI_API_KEY) {
-        throw new Error('Missing GEMINI_API_KEY');
-    }
+// Legacy interface for backward compatibility
+export interface ExtractedInvoice {
+  vendorName: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  dueDate: string;
+  totalAmount: number;
+  lineItems: {
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    amount: number;
+  }[];
+  suggestedCategory: string;
+  taxClass: "COGS - Deductible" | "OpEx - Non-Deductible";
+}
 
-    return gemini.getGenerativeModel({
-        model: 'gemini-1.5-flash',
-        generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0,
-        },
-    });
+// Helper to parse PDF buffer
+export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
+  const pdfParse = (await import('pdf-parse')).default;
+  const data = await pdfParse(buffer);
+  return data.text;
 }
 
 export async function extractInvoiceData(text: string): Promise<ExtractedInvoice> {
-    const prompt = `You are an invoice data extraction expert for cannabis accounting. Extract the following information from this invoice text and return it as JSON:
-
-1. vendorName: The company/person issuing the invoice
-2. invoiceNumber: The invoice number/reference
-3. invoiceDate: The date the invoice was issued (YYYY-MM-DD format)
-4. dueDate: The payment due date (YYYY-MM-DD format)
-5. totalAmount: The total amount due (number only, no currency symbol)
-6. lineItems: Array of items with description, quantity, unitPrice, and amount
-7. suggestedCategory: Best expense category (one of: Utilities, Office Supplies, Supplies, Insurance, Rent, Professional Services, Marketing, Security, Miscellaneous)
-8. taxClass: "COGS - Deductible" or "OpEx - Non-Deductible"
-
-Classify taxClass as "COGS - Deductible" for cultivation/production inputs (e.g., nutrients, grow supplies, packaging, soil, seeds, trimming). Classify as "OpEx - Non-Deductible" for operating expenses (e.g., rent, office supplies, payroll services, marketing, professional services).
-
-Invoice Text:
-${text}
-
-Return ONLY valid JSON, no markdown or extra text.`;
-
-    const model = getModel();
-    const response = await model.generateContent(prompt);
-    const content = response.response.text();
-    if (!content) {
-        throw new Error('Failed to extract invoice data');
+  const prompt = `
+    Analyze this invoice text and extract the following JSON data.
+    
+    Rules for 'taxClass':
+    - If the vendor sells cultivation supplies, seeds, nutrients, packaging, or direct production equipment, set taxClass to "COGS - Deductible".
+    - If the vendor is for rent, office supplies, marketing, legal, or utilities, set taxClass to "OpEx - Non-Deductible".
+    
+    Rules for 'suggestedCategory':
+    - Choose one of: Utilities, Office Supplies, Supplies, Insurance, Rent, Professional Services, Marketing, Security, Miscellaneous
+    
+    Return ONLY raw JSON with this structure:
+    {
+      "vendorName": "string",
+      "invoiceNumber": "string",
+      "invoiceDate": "YYYY-MM-DD",
+      "dueDate": "YYYY-MM-DD",
+      "totalAmount": number,
+      "lineItems": [{ "description": "string", "quantity": number, "unitPrice": number, "amount": number }],
+      "suggestedCategory": "string",
+      "taxClass": "string"
     }
 
-    return JSON.parse(content);
-}
+    Invoice Text:
+    ${text.substring(0, 3000)}
+  `;
 
-export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-    // Dynamic import for pdf-parse (it has issues with static imports in Next.js)
-    const pdfParse = (await import('pdf-parse')).default;
-    const data = await pdfParse(buffer);
-    return data.text;
+  try {
+    const result = await visionModel.generateContent(prompt);
+    const response = result.response;
+    let responseText = response.text();
+    
+    // Clean up markdown code blocks if Gemini adds them
+    responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    return JSON.parse(responseText) as ExtractedInvoice;
+  } catch (error) {
+    console.error("Gemini Extraction Error:", error);
+    throw new Error("Failed to extract data from invoice");
+  }
 }
