@@ -1,23 +1,47 @@
 import { google } from 'googleapis';
 
-// Load the Robot Credentials from .env.local
-const serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '{}');
+// 1. SAFELY PARSE THE KEY (The Fix)
+const getCredentials = () => {
+  try {
+    const jsonKey = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+    if (!jsonKey) {
+      console.error("❌ Missing GOOGLE_SERVICE_ACCOUNT_JSON in .env.local");
+      return {};
+    }
 
+    // Parse the JSON string
+    const credentials = JSON.parse(jsonKey);
+    
+    // CRITICAL: Fix the private key newlines
+    // This turns the string "\\n" into actual line breaks
+    if (credentials.private_key) {
+      credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+    }
+    
+    return credentials;
+  } catch (error) {
+    console.error("❌ Failed to parse Google Credentials. Check your .env.local formatting.", error);
+    return {};
+  }
+};
+
+// 2. Initialize Drive
 const auth = new google.auth.GoogleAuth({
-  credentials: serviceAccount,
+  credentials: getCredentials(),
   scopes: ['https://www.googleapis.com/auth/drive'],
 });
 
 const drive = google.drive({ version: 'v3', auth });
 
 /**
- * Moves a file to a specific folder (e.g., "Invoices/2024/Repairs")
- * Creates the folder if it doesn't exist.
+ * Moves a file from the Upload Staging area to a specific folder.
  */
 export async function moveFileToFolder(fileId: string, folderName: string) {
   try {
     const folderId = await findOrCreateFolder(folderName);
     
+    if (!folderId) throw new Error("Could not find or create destination folder");
+
     // Move the file
     const file = await drive.files.get({ fileId, fields: 'parents' });
     const previousParents = file.data.parents?.join(',') || '';
@@ -33,7 +57,7 @@ export async function moveFileToFolder(fileId: string, folderName: string) {
     return folderId;
   } catch (error) {
     console.error('Drive Move Error:', error);
-    throw error;
+    return null; 
   }
 }
 
@@ -56,9 +80,10 @@ export async function uploadFileToDrive(
       requestBody.parents = [folderId];
     }
 
+    const { Readable } = await import('stream');
     const media = {
       mimeType,
-      body: typeof content === 'string' ? content : require('stream').Readable.from(content),
+      body: typeof content === 'string' ? Readable.from([content]) : Readable.from(content),
     };
 
     const res = await drive.files.create({
@@ -71,14 +96,14 @@ export async function uploadFileToDrive(
     return res.data;
   } catch (error) {
     console.error('Drive Upload Error:', error);
-    throw error;
+    return null;
   }
 }
 
 /**
  * Download file content from Google Drive
  */
-export async function downloadFileFromDrive(fileId: string): Promise<string> {
+export async function downloadFileFromDrive(fileId: string): Promise<string | null> {
   try {
     const res = await drive.files.get(
       { fileId, alt: 'media' },
@@ -87,7 +112,7 @@ export async function downloadFileFromDrive(fileId: string): Promise<string> {
     return res.data as string;
   } catch (error) {
     console.error('Drive Download Error:', error);
-    throw error;
+    return null;
   }
 }
 
@@ -103,7 +128,7 @@ export async function getFileMetadata(fileId: string) {
     return res.data;
   } catch (error) {
     console.error('Drive Metadata Error:', error);
-    throw error;
+    return null;
   }
 }
 
@@ -120,31 +145,36 @@ export async function listFilesInFolder(folderId: string) {
     return res.data.files || [];
   } catch (error) {
     console.error('Drive List Error:', error);
-    throw error;
+    return [];
   }
 }
 
 // Internal Helper: Find or Create Folder
-async function findOrCreateFolder(name: string) {
-  // 1. Search for it
-  const list = await drive.files.list({
-    q: `mimeType='application/vnd.google-apps.folder' and name='${name}' and trashed=false`,
-    fields: 'files(id)',
-  });
+async function findOrCreateFolder(name: string): Promise<string | null> {
+  try {
+    // Search
+    const list = await drive.files.list({
+      q: `mimeType='application/vnd.google-apps.folder' and name='${name}' and trashed=false`,
+      fields: 'files(id)',
+    });
 
-  if (list.data.files && list.data.files.length > 0) {
-    return list.data.files[0].id!;
+    if (list.data.files && list.data.files.length > 0) {
+      return list.data.files[0].id!;
+    }
+
+    // Create
+    const res = await drive.files.create({
+      requestBody: {
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+      },
+      fields: 'id',
+    });
+    return res.data.id!;
+  } catch (error) {
+    console.error("Folder Error:", error);
+    return null;
   }
-
-  // 2. Create it if missing
-  const res = await drive.files.create({
-    requestBody: {
-      name,
-      mimeType: 'application/vnd.google-apps.folder',
-    },
-    fields: 'id',
-  });
-  return res.data.id!;
 }
 
 /**
