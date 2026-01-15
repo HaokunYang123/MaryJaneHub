@@ -1,6 +1,9 @@
 import { google } from 'googleapis';
 import { Readable } from 'stream';
 
+// --- Configuration ---
+const SHARED_DRIVE_ID = process.env.GOOGLE_SHARED_DRIVE_ID;
+
 const getCredentials = () => {
   try {
     const jsonKey = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -30,18 +33,46 @@ const drive = google.drive({ version: 'v3', auth });
 // --- Helper: Find or Create Folder ---
 async function findOrCreateFolder(name: string): Promise<string> {
   try {
-    const list = await drive.files.list({
-      q: `mimeType='application/vnd.google-apps.folder' and name='${name}' and trashed=false`,
+    // Search query: Name matches AND is inside the Shared Drive (if provided)
+    let query = `mimeType='application/vnd.google-apps.folder' and name='${name}' and trashed=false`;
+    if (SHARED_DRIVE_ID) {
+      query += ` and '${SHARED_DRIVE_ID}' in parents`;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const listRequest: any = {
+      q: query,
       fields: 'files(id)',
-    });
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    };
+
+    // If using a Shared Drive, we must specify the driveId and corpora
+    if (SHARED_DRIVE_ID) {
+      listRequest.driveId = SHARED_DRIVE_ID;
+      listRequest.corpora = 'drive';
+    }
+
+    const list = await drive.files.list(listRequest);
+
     if (list.data.files && list.data.files.length > 0) {
       return list.data.files[0].id!;
     }
     
-    const res = await drive.files.create({
-      requestBody: { name, mimeType: 'application/vnd.google-apps.folder' },
+    // Create the folder if it doesn't exist
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const createRequest: any = {
+      requestBody: { 
+        name, 
+        mimeType: 'application/vnd.google-apps.folder',
+        // If Shared Drive ID exists, set it as the parent
+        parents: SHARED_DRIVE_ID ? [SHARED_DRIVE_ID] : undefined
+      },
       fields: 'id',
-    });
+      supportsAllDrives: true,
+    };
+
+    const res = await drive.files.create(createRequest);
     return res.data.id!;
   } catch (error) {
     console.error("Folder Error:", error);
@@ -63,13 +94,14 @@ export async function uploadFileToDrive(file: File, folderName: string = "Inbox"
     const res = await drive.files.create({
       requestBody: {
         name: file.name,
-        parents: [folderId],
+        parents: [folderId], // Uploads to the specific folder
       },
       media: {
         mimeType: file.type,
         body: stream,
       },
       fields: 'id',
+      supportsAllDrives: true, // <-- ADDED THIS
     });
 
     console.log(`✅ Uploaded ${file.name} to Drive ID: ${res.data.id}`);
@@ -104,6 +136,7 @@ export async function uploadBufferToDrive(
         body: stream,
       },
       fields: 'id, name, webViewLink',
+      supportsAllDrives: true, // <-- ADDED THIS
     });
 
     console.log(`✅ Uploaded ${fileName} to Drive ID: ${res.data.id}`);
@@ -118,7 +151,14 @@ export async function uploadBufferToDrive(
 export async function moveFileToFolder(fileId: string, folderName: string): Promise<string | null> {
   try {
     const folderId = await findOrCreateFolder(folderName);
-    const file = await drive.files.get({ fileId, fields: 'parents' });
+    
+    // Need supportsAllDrives here too
+    const file = await drive.files.get({ 
+      fileId, 
+      fields: 'parents',
+      supportsAllDrives: true 
+    });
+    
     const previousParents = file.data.parents?.join(',') || '';
 
     await drive.files.update({
@@ -126,6 +166,7 @@ export async function moveFileToFolder(fileId: string, folderName: string): Prom
       addParents: folderId,
       removeParents: previousParents,
       fields: 'id, parents',
+      supportsAllDrives: true, // <-- ADDED THIS
     });
     
     console.log(`✅ Moved file ${fileId} to ${folderName}`);
@@ -140,7 +181,7 @@ export async function moveFileToFolder(fileId: string, folderName: string): Prom
 export async function downloadFileFromDrive(fileId: string): Promise<string | null> {
   try {
     const res = await drive.files.get(
-      { fileId, alt: 'media' },
+      { fileId, alt: 'media', supportsAllDrives: true }, // <-- ADDED THIS
       { responseType: 'text' }
     );
     return res.data as string;
@@ -156,6 +197,7 @@ export async function getFileMetadata(fileId: string) {
     const res = await drive.files.get({
       fileId,
       fields: 'id, name, mimeType, parents, webViewLink, createdTime',
+      supportsAllDrives: true, // <-- ADDED THIS
     });
     return res.data;
   } catch (error) {
@@ -167,15 +209,40 @@ export async function getFileMetadata(fileId: string) {
 // --- List files in a folder ---
 export async function listFilesInFolder(folderId: string) {
   try {
-    const res = await drive.files.list({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const listRequest: any = {
       q: `'${folderId}' in parents and trashed=false`,
       fields: 'files(id, name, mimeType, createdTime, webViewLink)',
       orderBy: 'createdTime desc',
-    });
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    };
+
+    if (SHARED_DRIVE_ID) {
+      listRequest.driveId = SHARED_DRIVE_ID;
+      listRequest.corpora = 'drive';
+    }
+
+    const res = await drive.files.list(listRequest);
     return res.data.files || [];
   } catch (error) {
     console.error('Drive List Error:', error);
     return [];
+  }
+}
+
+// --- Delete File ---
+export async function deleteFileFromDrive(fileId: string): Promise<boolean> {
+  try {
+    await drive.files.delete({
+      fileId,
+      supportsAllDrives: true, // <-- ADDED THIS
+    });
+    console.log(`✅ Deleted file ${fileId}`);
+    return true;
+  } catch (error) {
+    console.error('Drive Delete Error:', error);
+    return false;
   }
 }
 
