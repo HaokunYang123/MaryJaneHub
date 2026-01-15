@@ -11,7 +11,7 @@ export const runtime = 'nodejs';
 
 // 1. Initialize Gemini instead of OpenAI
 const model = new ChatGoogleGenerativeAI({
-  modelName: 'gemini-pro',
+  modelName: 'gemini-2.5-flash',
   temperature: 0,
   apiKey: process.env.GEMINI_API_KEY,
 });

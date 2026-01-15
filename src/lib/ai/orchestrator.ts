@@ -126,7 +126,7 @@ export class AIOrchestrator {
 
       // Get Gemini model with function calling
       const model = this.genAI.getGenerativeModel({
-        model: 'gemini-pro',
+        model: 'gemini-2.5-flash',
         systemInstruction: SYSTEM_PROMPT,
         tools: [{ functionDeclarations: this.getGeminiTools() }]
       });
