@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeUploadedFile } from '@/lib/ai/secretary';
 import { uploadFileToDrive } from '@/lib/google-drive';
+import { extractTextFromPDF } from '@/lib/invoice-extractor';
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,9 +28,7 @@ export async function POST(req: NextRequest) {
     if (file.type === 'application/pdf') {
       try {
         const buffer = Buffer.from(await file.arrayBuffer());
-        const pdfParse = (await import('pdf-parse')).default;
-        const pdfData = await pdfParse(buffer);
-        textContext = pdfData.text || textContext;
+        textContext = await extractTextFromPDF(buffer);
       } catch (pdfError) {
         console.log('PDF parse failed, using filename:', pdfError);
       }

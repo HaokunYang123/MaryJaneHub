@@ -40,8 +40,27 @@ export interface InvoiceData {
 }
 
 // Helper to parse PDF buffer
+async function getPdfParser() {
+  const pdfModule = await import('pdf-parse');
+  const pdfParse = (pdfModule as unknown as { default?: unknown })?.default ?? pdfModule;
+
+  if (typeof pdfParse === 'function') {
+    return pdfParse as (buf: Buffer) => Promise<{ text: string }>;
+  }
+
+  const maybeFn =
+    (pdfParse as { default?: unknown })?.default ??
+    (pdfParse as { pdfParse?: unknown })?.pdfParse;
+
+  if (typeof maybeFn === 'function') {
+    return maybeFn as (buf: Buffer) => Promise<{ text: string }>;
+  }
+
+  throw new Error('pdf-parse did not export a function');
+}
+
 export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  const pdfParse = (await import('pdf-parse')).default;
+  const pdfParse = await getPdfParser();
   const data = await pdfParse(buffer);
   return data.text;
 }
