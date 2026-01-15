@@ -65,7 +65,7 @@ export default function FilesPage() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0]) return;
-    
+
     const file = e.target.files[0];
     setIsUploading(true);
 
@@ -77,7 +77,7 @@ export default function FilesPage() {
       // The browser automatically generates it with a special "boundary" string
       const res = await fetch('/api/files/upload', {
         method: 'POST',
-        body: formData, 
+        body: formData,
       });
 
       if (!res.ok) {
@@ -87,7 +87,7 @@ export default function FilesPage() {
 
       // Success! Refresh the list
       await fetchPendingDocs();
-      
+
     } catch (error) {
       console.error("Upload Error:", error);
       alert("Upload failed. Check console for details.");
@@ -101,13 +101,13 @@ export default function FilesPage() {
     try {
       // Optimistic UI update
       setPendingDocs(prev => prev.filter(d => d.id !== docId));
-      
+
       const res = await fetch('/api/files/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId: docId })
       });
-      
+
       if (!res.ok) {
         throw new Error("Sync failed");
       }
@@ -121,13 +121,13 @@ export default function FilesPage() {
     try {
       // Optimistic UI update
       setPendingDocs(prev => prev.filter(d => d.id !== docId));
-      
+
       const res = await fetch('/api/files/reject', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId: docId })
       });
-      
+
       if (!res.ok) {
         throw new Error("Reject failed");
       }
@@ -144,20 +144,20 @@ export default function FilesPage() {
         <Sidebar />
         <main className="flex-1 overflow-y-auto bg-slate-50 p-6 scroll-smooth">
           <div className="max-w-7xl mx-auto space-y-8">
-            
+
             {/* HEADER & UPLOAD */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
                 <h1 className="text-3xl font-bold text-[#1B5E20]">Document Control</h1>
                 <p className="text-slate-500">Upload invoices here. Review them before they hit your books.</p>
               </div>
-              
+
               <div className="relative">
-                <input 
-                  type="file" 
-                  id="file-upload" 
-                  className="hidden" 
-                  onChange={handleFileUpload} 
+                <input
+                  type="file"
+                  id="file-upload"
+                  className="hidden"
+                  onChange={handleFileUpload}
                   accept=".pdf,.png,.jpg,.jpeg,.txt"
                   disabled={isUploading}
                 />
@@ -210,9 +210,9 @@ export default function FilesPage() {
               ) : (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {pendingDocs.map((doc) => (
-                    <ReviewCard 
-                      key={doc.id} 
-                      doc={doc} 
+                    <ReviewCard
+                      key={doc.id}
+                      doc={doc}
                       onConfirm={handleConfirm}
                       onReject={handleReject}
                     />
@@ -229,29 +229,35 @@ export default function FilesPage() {
 }
 
 // Sub-component for individual cards
-function ReviewCard({ 
-  doc, 
+function ReviewCard({
+  doc,
   onConfirm,
-  onReject 
-}: { 
-  doc: PendingDocument; 
+  onReject
+}: {
+  doc: PendingDocument;
   onConfirm: (id: string) => void;
   onReject: (id: string) => void;
 }) {
   const analysis = doc.metadata;
   const isDuplicate = doc.is_duplicate;
+  const [isExpanded, setIsExpanded] = useState(false);
 
   return (
     <Card className={`p-5 border-l-4 ${isDuplicate ? 'border-l-red-500 bg-red-50/30' : 'border-l-[#1B5E20]'} shadow-sm hover:shadow-md transition-shadow`}>
-      
+
       {/* Card Header */}
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 bg-white rounded-full flex items-center justify-center border shadow-sm">
+          <div className="h-10 w-10 bg-white rounded-full flex items-center justify-center border shadow-sm shrink-0">
             <span className="material-symbols-outlined text-slate-600">description</span>
           </div>
-          <div>
-            <p className="font-semibold text-slate-900 truncate max-w-[150px]">
+          <div className="min-w-0">
+            <p
+              className={`font-semibold text-slate-900 cursor-pointer transition-all ${isExpanded ? 'whitespace-normal break-words' : 'truncate max-w-[150px]'
+                }`}
+              onClick={() => setIsExpanded(!isExpanded)}
+              title={isExpanded ? "Click to collapse" : "Click to expand"}
+            >
               {analysis?.data?.vendorName || "Unknown Vendor"}
             </p>
             <p className="text-xs text-slate-500">
@@ -260,7 +266,7 @@ function ReviewCard({
           </div>
         </div>
         {isDuplicate && (
-          <Badge variant="destructive" className="bg-red-100 text-red-700 border-red-200">
+          <Badge variant="destructive" className="bg-red-100 text-red-700 border-red-200 shrink-0">
             Duplicate
           </Badge>
         )}
@@ -275,26 +281,15 @@ function ReviewCard({
           </span>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-slate-500">Category</span>
+          <span className="text-slate-500">Destination</span>
           <Badge variant="outline" className="text-xs font-normal">
-            {analysis?.category || 'Unknown'}
+            Drive/{analysis?.category || 'Unknown'}
           </Badge>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-slate-500">Date</span>
           <span className="text-slate-700">{analysis?.data?.date || 'N/A'}</span>
         </div>
-        {analysis?.confidence && (
-          <div className="flex justify-between items-center">
-            <span className="text-slate-500">AI Confidence</span>
-            <span className={`text-sm font-medium ${
-              analysis.confidence > 0.8 ? 'text-green-600' : 
-              analysis.confidence > 0.5 ? 'text-amber-600' : 'text-red-600'
-            }`}>
-              {Math.round(analysis.confidence * 100)}%
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Summary */}
@@ -310,17 +305,17 @@ function ReviewCard({
             We processed a similar bill recently.
           </p>
         )}
-        
+
         <div className="grid grid-cols-2 gap-2">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="w-full text-slate-600 hover:text-red-600 hover:bg-red-50 border-slate-200"
             onClick={() => onReject(doc.id)}
           >
             <span className="material-symbols-outlined text-sm mr-1">close</span>
             Reject
           </Button>
-          <Button 
+          <Button
             className="w-full bg-[#1B5E20] hover:bg-[#154a19]"
             onClick={() => onConfirm(doc.id)}
           >
