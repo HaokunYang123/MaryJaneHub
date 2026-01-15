@@ -1,9 +1,63 @@
 // The "Secretary" - Business logic for Trust but Verify workflow
 // Supabase-only persistence (no local fallback)
 
-import { analyzeAndCategorize, AIAnalysisResult } from '@/lib/invoice-extractor';
+import { analyzeAndCategorize, runTier1, runTier2, AIAnalysisResult, Tier1Result, Tier2Result } from '@/lib/invoice-extractor';
 import { moveFileToFolder, getFolderByStatus } from '@/lib/google-drive';
 import { supabase } from '@/lib/supabase';
+
+// File interface for batch processing
+interface BatchFile {
+  driveId: string;
+  buffer: Buffer;
+  type: string;
+}
+
+/**
+ * BATCH ORCHESTRATOR: Process documents in batches of 50
+ * Uses tiered AI to minimize costs on 5,000+ files
+ */
+export async function processDocumentBatch(files: BatchFile[]) {
+  console.log(`📦 Processing batch of ${files.length} files`);
+  const results = [];
+
+  for (const file of files) {
+    try {
+      // 1. Tier 1 runs on EVERYTHING ($0.00001 cost)
+      const classification: Tier1Result = await runTier1(file.buffer, file.type);
+
+      let finalData: Tier1Result & Partial<Tier2Result> = classification;
+      let status = 'processed'; // Default for non-actionable
+
+      // 2. Tier 2 (Gemini 2.5 Flash) runs ONLY on actionable items
+      if (classification.needs_deep_analysis) {
+        const deepData: Tier2Result = await runTier2(file.buffer, file.type);
+        finalData = { ...classification, ...deepData };
+        status = 'needs_review'; // Actionable items need Mary's approval
+      }
+
+      // 3. Save to Supabase
+      const { data: doc, error } = await supabase.from('documents').insert({
+        drive_id: file.driveId,
+        metadata: finalData,
+        category: (finalData as Tier2Result).filingCategory || classification.subcategory || 'Uncategorized',
+        status: status,
+        is_duplicate: false,
+      }).select().single();
+
+      if (error) {
+        console.error(`Failed to save ${file.driveId}:`, error.message);
+      } else {
+        results.push(doc);
+      }
+
+    } catch (error) {
+      console.error(`Error processing ${file.driveId}:`, error);
+    }
+  }
+
+  console.log(`✅ Batch complete: ${results.length}/${files.length} processed`);
+  return results;
+}
 
 /**
  * PHASE 1: ANALYZE & HOLD

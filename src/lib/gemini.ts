@@ -4,8 +4,16 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 // Initialize the API with your key
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-// Export specific models
-// Using 'gemini-2.5-flash' - confirmed available via curl
+// Tier 1 - Classification (Fast/Cheap for 5,000 files)
+export const classifierModel = genAI.getGenerativeModel({
+    model: process.env.TIER1_MODEL || "gemini-2.0-flash-lite"
+});
 
-export const chatModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
-export const visionModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+// Tier 2 - Deep Extraction (Gemini 2.5 Flash - powerhouse)
+export const deepExtractionModel = genAI.getGenerativeModel({
+    model: process.env.TIER2_MODEL || "gemini-2.5-flash"
+});
+
+// Legacy exports for backward compatibility
+export const chatModel = deepExtractionModel;
+export const visionModel = deepExtractionModel;
