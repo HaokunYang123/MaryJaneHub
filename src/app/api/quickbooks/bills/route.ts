@@ -7,6 +7,7 @@ export async function GET() {
     }
 
     try {
+        console.log('[quickbooks/bills] Fetching bills');
         const bills = await getBills();
         return NextResponse.json({ bills });
     } catch (error) {
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest) {
 
     try {
         const data = await request.json();
+        console.log('[quickbooks/bills] Incoming payload', data);
 
         // Validate required fields
         if (!data.vendorName || !data.dueDate || !data.lineItems || data.lineItems.length === 0) {
@@ -30,13 +32,28 @@ export async function POST(request: NextRequest) {
             }, { status: 400 });
         }
 
+        const taxClassMap: Record<string, { value: string; name: string }> = {
+            'COGS - Deductible': { value: '100', name: 'COGS - Deductible' },
+            'OpEx - Non-Deductible': { value: '200', name: 'OpEx - Non-Deductible' },
+        };
+
+        const mappedClassRef = data.taxClass ? taxClassMap[data.taxClass] : undefined;
+        const classRef = data.classRef || data.ClassRef || mappedClassRef;
+
+        console.log('[quickbooks/bills] Tax class mapping', {
+            taxClass: data.taxClass,
+            classRef,
+        });
+
         const bill = await createBill({
             vendorName: data.vendorName,
             dueDate: data.dueDate,
             lineItems: data.lineItems,
             invoiceNumber: data.invoiceNumber,
+            classRef,
         });
 
+        console.log('[quickbooks/bills] Bill created', bill?.Id);
         return NextResponse.json({
             success: true,
             bill,

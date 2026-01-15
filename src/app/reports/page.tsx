@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Footer } from "@/components/layout/footer";
@@ -11,6 +11,23 @@ interface PnLRow {
     type: 'header' | 'item' | 'total';
 }
 
+interface ConsolidatedPnL {
+    totalRevenue: number;
+    totalExpenses: number;
+    breakdown: { entity: string; revenue: number }[];
+}
+
+const demoEntities = [
+    { id: 'phx-001', label: 'Phoenix Retail' },
+    { id: 'tuc-002', label: 'Tucson Retail' },
+    { id: 'wh-003', label: 'Wholesale AZ' },
+    { id: 'grow-004', label: 'Cultivation Ops' },
+    { id: 'labs-005', label: 'Extraction Lab' },
+    { id: 'log-006', label: 'Distribution' },
+    { id: 're-007', label: 'Real Estate' },
+    { id: 'hold-008', label: 'Holdings' },
+];
+
 export default function ReportsPage() {
     const [startDate, setStartDate] = useState(() => {
         const d = new Date();
@@ -19,35 +36,23 @@ export default function ReportsPage() {
     });
     const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
     const [loading, setLoading] = useState(false);
-    const [reportData, setReportData] = useState<PnLRow[] | null>(null);
+    const [consolidatedData, setConsolidatedData] = useState<ConsolidatedPnL | null>(null);
     const [authenticated, setAuthenticated] = useState<boolean | null>(null);
 
     const fetchReport = async () => {
         setLoading(true);
         try {
-            const response = await fetch(`/api/quickbooks/reports/pnl?start_date=${startDate}&end_date=${endDate}`);
+            const entityIds = demoEntities.map((entity) => entity.id).join(',');
+            const response = await fetch(
+                `/api/quickbooks/reports/pnl?start_date=${startDate}&end_date=${endDate}&entityIds=${encodeURIComponent(entityIds)}`
+            );
             const result = await response.json();
 
             if (result.error?.includes('Not authenticated')) {
                 setAuthenticated(false);
-            } else if (result.report) {
+            } else if (typeof result.totalRevenue === 'number') {
                 setAuthenticated(true);
-                // Parse QuickBooks report format into simple rows
-                const rows: PnLRow[] = [
-                    { name: 'Income', value: 0, type: 'header' },
-                    { name: 'Sales Revenue', value: 125000, type: 'item' },
-                    { name: 'Service Revenue', value: 45000, type: 'item' },
-                    { name: 'Total Income', value: 170000, type: 'total' },
-                    { name: 'Expenses', value: 0, type: 'header' },
-                    { name: 'Cost of Goods Sold', value: 42000, type: 'item' },
-                    { name: 'Payroll', value: 68420, type: 'item' },
-                    { name: 'Rent', value: 12000, type: 'item' },
-                    { name: 'Utilities', value: 3400, type: 'item' },
-                    { name: 'Insurance', value: 2800, type: 'item' },
-                    { name: 'Total Expenses', value: 128620, type: 'total' },
-                    { name: 'Net Income', value: 41380, type: 'total' },
-                ];
-                setReportData(rows);
+                setConsolidatedData(result);
             }
         } catch (error) {
             console.error('Error fetching report:', error);
@@ -80,7 +85,47 @@ export default function ReportsPage() {
         { name: 'Net Operating Income', value: 265580, type: 'total' },
     ];
 
-    const displayData = reportData || demoData;
+    const demoConsolidated: ConsolidatedPnL = {
+        totalRevenue: 579000,
+        totalExpenses: 313420,
+        breakdown: [
+            { entity: 'Phoenix Retail', revenue: 312000 },
+            { entity: 'Tucson Retail', revenue: 189000 },
+            { entity: 'Wholesale AZ', revenue: 78000 },
+        ],
+    };
+
+    const entityLabelMap = useMemo(
+        () => demoEntities.reduce<Record<string, string>>((acc, entity) => {
+            acc[entity.id] = entity.label;
+            return acc;
+        }, {}),
+        []
+    );
+
+    const displayConsolidated = consolidatedData || demoConsolidated;
+    const displayData = demoData;
+    const netProfit = displayConsolidated.totalRevenue - displayConsolidated.totalExpenses;
+    const totalRevenue = Math.max(displayConsolidated.totalRevenue, 1);
+    const chartSegments = displayConsolidated.breakdown.map((entry, index) => {
+        const palette = [
+            'bg-[#1B5E20]',
+            'bg-[#1B5E20]/80',
+            'bg-[#1B5E20]/60',
+            'bg-slate-500',
+            'bg-slate-400',
+            'bg-slate-300',
+            'bg-slate-200',
+            'bg-slate-100',
+        ];
+
+        return {
+            ...entry,
+            label: entityLabelMap[entry.entity] || entry.entity,
+            color: palette[index % palette.length],
+            width: `${(entry.revenue / totalRevenue) * 100}%`,
+        };
+    });
 
     return (
         <div className="bg-white text-slate-900 min-h-screen flex flex-col">
@@ -135,6 +180,38 @@ export default function ReportsPage() {
                         </div>
                     )}
 
+                    {/* Consolidated Revenue Stack */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="font-bold text-slate-900">Master P&amp;L Revenue Stack</h3>
+                                <p className="text-xs text-slate-500">Aggregated revenue across all entities</p>
+                            </div>
+                            <span className="text-xs text-slate-400">{startDate} to {endDate}</span>
+                        </div>
+                        <div className="flex h-10 w-full overflow-hidden rounded-full border border-slate-200 bg-slate-50">
+                            {chartSegments.map((segment) => (
+                                <div
+                                    key={segment.label}
+                                    className={`${segment.color} h-full`}
+                                    style={{ width: segment.width }}
+                                    title={`${segment.label}: $${segment.revenue.toLocaleString()}`}
+                                />
+                            ))}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                            {chartSegments.map((segment) => (
+                                <div key={segment.label} className="flex items-center justify-between text-xs text-slate-600">
+                                    <div className="flex items-center gap-2">
+                                        <span className={`size-2 rounded-full ${segment.color}`} />
+                                        <span className="font-semibold">{segment.label}</span>
+                                    </div>
+                                    <span>${segment.revenue.toLocaleString()}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
                     {/* P&L Table */}
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
@@ -169,17 +246,17 @@ export default function ReportsPage() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
                         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
                             <p className="text-xs text-slate-400 font-bold uppercase">Total Revenue</p>
-                            <p className="text-3xl font-black text-slate-800 mt-1">$579,000</p>
+                            <p className="text-3xl font-black text-slate-800 mt-1">${displayConsolidated.totalRevenue.toLocaleString()}</p>
                             <p className="text-xs text-green-600 mt-2">+18.2% vs last period</p>
                         </div>
                         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
                             <p className="text-xs text-slate-400 font-bold uppercase">Total Expenses</p>
-                            <p className="text-3xl font-black text-slate-800 mt-1">$313,420</p>
+                            <p className="text-3xl font-black text-slate-800 mt-1">${displayConsolidated.totalExpenses.toLocaleString()}</p>
                             <p className="text-xs text-red-600 mt-2">+12.4% vs last period</p>
                         </div>
                         <div className="bg-[#1B5E20] rounded-xl p-6 shadow-sm text-white">
                             <p className="text-xs text-white/60 font-bold uppercase">Net Profit</p>
-                            <p className="text-3xl font-black mt-1">$265,580</p>
+                            <p className="text-3xl font-black mt-1">${netProfit.toLocaleString()}</p>
                             <p className="text-xs text-green-300 mt-2">+23.1% vs last period</p>
                         </div>
                     </div>
