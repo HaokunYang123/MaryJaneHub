@@ -17,8 +17,7 @@ export async function POST(req: NextRequest) {
     let text = '';
     
     if (file.type === 'application/pdf') {
-      // For PDF files, we'd use pdf-parse
-      // For now, we'll use a placeholder or the file name
+      // For PDF files, use pdf-parse
       const buffer = Buffer.from(await file.arrayBuffer());
       try {
         const pdfParse = (await import('pdf-parse')).default;
@@ -28,8 +27,7 @@ export async function POST(req: NextRequest) {
         text = `PDF Document: ${file.name}`;
       }
     } else if (file.type.startsWith('image/')) {
-      // For images, we'd use OCR
-      // For now, use placeholder
+      // For images, we'd use OCR - for now use placeholder
       text = `Image Document: ${file.name}`;
     } else {
       // For text files
@@ -41,8 +39,9 @@ export async function POST(req: NextRequest) {
       text = `Document uploaded: ${file.name}`;
     }
 
-    // Trigger Secretary Analysis
-    const result = await analyzeUploadedFile(driveId, text);
+    // 3. Trigger Secretary Analysis
+    // EXPLICITLY PASS 'web' - User clicked upload on dashboard = assume financial
+    const result = await analyzeUploadedFile(driveId, text, 'web');
     
     return NextResponse.json(result);
   } catch (error) {

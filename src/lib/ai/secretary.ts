@@ -2,127 +2,78 @@
 // Handles Phase 1 (Analyze & Hold) and Phase 2 (Execute on Confirm)
 // Uses Google Drive for file storage + Supabase for metadata
 
+import { analyzeAndCategorize, AIAnalysisResult } from '@/lib/invoice-extractor';
 import { supabase } from '@/lib/supabase';
-import { visionModel } from '@/lib/gemini';
 import { moveFileToFolder, getFolderByStatus } from '@/lib/google-drive';
-
-// Strict Type Definition for the AI's Output
-export interface DocumentAnalysis {
-  summary: string;
-  category: string;
-  confidence: number;
-  data: {
-    vendorName: string;
-    amount: number;
-    date: string;
-    description: string;
-  };
-  quickbooksData?: {
-    accountName: string;
-    classRef: string;
-  };
-}
-
-/**
- * Analyze document content using Gemini
- */
-async function analyzeAndCategorize(content: string): Promise<DocumentAnalysis> {
-  const prompt = `
-    Analyze this document/invoice text and extract information.
-    
-    Categories to choose from:
-    - Invoice (bills to pay)
-    - Receipt (proof of payment)
-    - Contract (agreements, leases)
-    - Tax Document (1099, W2, etc.)
-    - Bank Statement
-    - Insurance
-    - Other
-
-    For 280E Tax Compliance:
-    - If vendor sells cultivation supplies, seeds, nutrients, packaging = COGS (Deductible)
-    - If vendor is for rent, office, marketing, legal, utilities = OpEx (Non-Deductible)
-
-    Return ONLY raw JSON with this structure:
-    {
-      "summary": "Brief description of the document",
-      "category": "One of the categories above",
-      "confidence": 0.0-1.0,
-      "data": {
-        "vendorName": "Company name or 'Unknown'",
-        "amount": 0.00,
-        "date": "YYYY-MM-DD or today's date if not found",
-        "description": "What is this for"
-      },
-      "quickbooksData": {
-        "accountName": "Suggested GL account",
-        "classRef": "COGS - Deductible or OpEx - Non-Deductible"
-      }
-    }
-
-    Document Text:
-    ${content.substring(0, 3000)}
-  `;
-
-  try {
-    const result = await visionModel.generateContent(prompt);
-    const response = result.response;
-    let text = response.text();
-    
-    // Clean up markdown code blocks if Gemini adds them
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    return JSON.parse(text) as DocumentAnalysis;
-  } catch (error) {
-    console.error("Gemini Analysis Error:", error);
-    // Return default analysis if AI fails
-    return {
-      summary: "Unable to analyze document",
-      category: "Other",
-      confidence: 0,
-      data: {
-        vendorName: "Unknown",
-        amount: 0,
-        date: new Date().toISOString().split('T')[0],
-        description: "Document requires manual review"
-      }
-    };
-  }
-}
 
 /**
  * PHASE 1: ANALYZE & HOLD
- * Analyzes the file, checks for duplicates, and saves as "needs_review"
- * File stays in Drive Inbox, metadata goes to Supabase
+ * Analyzes the file with context-aware AI
+ * - 'web' source: Aggressive mode (assume financial)
+ * - 'drive' source: Cautious mode (check if financial first)
  */
-export async function analyzeUploadedFile(fileId: string, fileContent: string) {
-  console.log(`🕵️‍♂️ Analyzing file: ${fileId}`);
+export async function analyzeUploadedFile(
+  fileId: string, 
+  fileContent: string, 
+  source: 'web' | 'drive' = 'web'
+) {
+  console.log(`🕵️‍♂️ Analyzing file: ${fileId} (Source: ${source})`);
 
-  // 1. Run Gemini Analysis
-  const analysis: DocumentAnalysis = await analyzeAndCategorize(fileContent);
+  // 1. Run AI with the Source Context
+  const analysis: AIAnalysisResult = await analyzeAndCategorize(fileContent, source);
 
-  // 2. DUPLICATE DETECTION LOGIC
-  // Check for existing docs with same Vendor + Amount within the last 30 days
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  
-  let isDuplicate = false;
-  let duplicateId = null;
-  
-  try {
-    const { data: potentialDupes } = await supabase
-      .from('documents')
-      .select('id, created_at, metadata')
-      .filter('metadata->>vendorName', 'eq', analysis.data.vendorName)
-      .filter('metadata->>amount', 'eq', String(analysis.data.amount))
-      .gte('created_at', thirtyDaysAgo);
-
-    isDuplicate = potentialDupes && potentialDupes.length > 0;
-    duplicateId = isDuplicate ? potentialDupes![0].id : null;
-  } catch (error) {
-    console.log('Duplicate check skipped (Supabase may not be configured):', error);
+  // 2. LOGIC FOR NON-FINANCIAL FILES (The "EIN Letter" Case)
+  if (!analysis.isFinancial && source === 'drive') {
+    console.log(`📂 Non-financial file detected: ${analysis.summary}`);
+    
+    // Just organize it in Drive, don't draft it for QuickBooks
+    try {
+      await moveFileToFolder(fileId, analysis.filingCategory);
+    } catch (driveError) {
+      console.log('Drive move skipped:', driveError);
+    }
+    
+    // Save to DB as "archived" just for memory (skips Review Queue)
+    try {
+      await supabase.from('documents').insert({
+        drive_id: fileId,
+        content: fileContent,
+        metadata: analysis,
+        category: analysis.filingCategory,
+        status: 'archived', // <--- Skips the Review Queue
+      });
+    } catch (dbError) {
+      console.log('DB insert skipped:', dbError);
+    }
+    
+    return { 
+      success: true, 
+      message: "Archived non-financial document",
+      analysis,
+      status: 'archived'
+    };
   }
 
-  // 3. Save to Supabase (Status: 'needs_review')
+  // 3. LOGIC FOR FINANCIAL FILES (Business as usual)
+  // Check for duplicates within last 30 days
+  let isDuplicate = false;
+  let duplicateId = null;
+
+  try {
+    const { data: duplicates } = await supabase
+      .from('documents')
+      .select('id')
+      .filter('metadata->>vendorName', 'eq', analysis.data.vendorName)
+      .filter('metadata->>amount', 'eq', String(analysis.data.amount))
+      .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+
+    isDuplicate = duplicates && duplicates.length > 0;
+    duplicateId = isDuplicate ? duplicates![0].id : null;
+  } catch (error) {
+    console.log('Duplicate check skipped:', error);
+  }
+
+  // 4. Save to DB for Review
   try {
     const { data, error } = await supabase
       .from('documents')
@@ -130,7 +81,7 @@ export async function analyzeUploadedFile(fileId: string, fileContent: string) {
         drive_id: fileId,
         content: fileContent,
         metadata: analysis,
-        category: analysis.category,
+        category: analysis.filingCategory,
         status: 'needs_review',
         is_duplicate: isDuplicate,
         duplicate_of_id: duplicateId
@@ -140,20 +91,19 @@ export async function analyzeUploadedFile(fileId: string, fileContent: string) {
 
     if (error) {
       console.error("DB Insert Error:", error);
-      // Return mock data if Supabase fails
       return {
         id: `mock_${Date.now()}`,
         drive_id: fileId,
         content: fileContent,
         metadata: analysis,
-        category: analysis.category,
+        category: analysis.filingCategory,
         status: 'needs_review',
         is_duplicate: isDuplicate,
         created_at: new Date().toISOString()
       };
     }
     
-    console.log(`✅ Document saved with status: needs_review, isDuplicate: ${isDuplicate}`);
+    console.log(`✅ Document saved: needs_review, isDuplicate: ${isDuplicate}`);
     return data;
   } catch (error) {
     console.log('Supabase not configured, returning mock data');
@@ -162,7 +112,7 @@ export async function analyzeUploadedFile(fileId: string, fileContent: string) {
       drive_id: fileId,
       content: fileContent,
       metadata: analysis,
-      category: analysis.category,
+      category: analysis.filingCategory,
       status: 'needs_review',
       is_duplicate: isDuplicate,
       created_at: new Date().toISOString()
@@ -193,16 +143,16 @@ export async function confirmAndExecute(documentId: string) {
     throw new Error("Document already processed");
   }
 
-  const analysis = doc.metadata as DocumentAnalysis;
+  const analysis = doc.metadata as AIAnalysisResult;
 
   try {
     // 2. Move file in Google Drive to "Processed" folder
     try {
-      const processedFolderId = await getFolderByStatus('processed');
-      await moveFileToFolder(doc.drive_id, `Mary - Processed/${analysis.category}`);
+      await getFolderByStatus('processed');
+      await moveFileToFolder(doc.drive_id, `Mary - Processed/${analysis.filingCategory}`);
       console.log(`📁 Moved file ${doc.drive_id} to Processed folder`);
     } catch (driveError) {
-      console.log('Google Drive move skipped (may not be configured):', driveError);
+      console.log('Google Drive move skipped:', driveError);
     }
 
     // 3. Here you would also sync to QuickBooks
