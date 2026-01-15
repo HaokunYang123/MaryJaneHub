@@ -2,7 +2,8 @@ import { google } from 'googleapis';
 import { Readable } from 'stream';
 
 // --- Configuration ---
-const SHARED_DRIVE_ID = process.env.GOOGLE_SHARED_DRIVE_ID;
+// This can be a Shared Drive ID (starts with 0A...) OR a regular Folder ID
+const ROOT_FOLDER_ID = process.env.GOOGLE_ROOT_FOLDER_ID;
 
 const getCredentials = () => {
   try {
@@ -33,25 +34,24 @@ const drive = google.drive({ version: 'v3', auth });
 // --- Helper: Find or Create Folder ---
 async function findOrCreateFolder(name: string): Promise<string> {
   try {
-    // Search query: Name matches AND is inside the Shared Drive (if provided)
+    // Universal Search Query:
+    // 1. Matches name
+    // 2. Is not in trash
+    // 3. If a ROOT_ID is provided, strict check that the folder is INSIDE that root
     let query = `mimeType='application/vnd.google-apps.folder' and name='${name}' and trashed=false`;
-    if (SHARED_DRIVE_ID) {
-      query += ` and '${SHARED_DRIVE_ID}' in parents`;
+    
+    if (ROOT_FOLDER_ID) {
+      query += ` and '${ROOT_FOLDER_ID}' in parents`;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const listRequest: any = {
       q: query,
       fields: 'files(id)',
-      supportsAllDrives: true,
+      // These two flags make it work for BOTH Shared Drives and Shared Folders
+      supportsAllDrives: true, 
       includeItemsFromAllDrives: true,
     };
-
-    // If using a Shared Drive, we must specify the driveId and corpora
-    if (SHARED_DRIVE_ID) {
-      listRequest.driveId = SHARED_DRIVE_ID;
-      listRequest.corpora = 'drive';
-    }
 
     const list = await drive.files.list(listRequest);
 
@@ -65,8 +65,8 @@ async function findOrCreateFolder(name: string): Promise<string> {
       requestBody: { 
         name, 
         mimeType: 'application/vnd.google-apps.folder',
-        // If Shared Drive ID exists, set it as the parent
-        parents: SHARED_DRIVE_ID ? [SHARED_DRIVE_ID] : undefined
+        // Create it INSIDE the root folder/drive if specified
+        parents: ROOT_FOLDER_ID ? [ROOT_FOLDER_ID] : undefined
       },
       fields: 'id',
       supportsAllDrives: true,
@@ -94,14 +94,14 @@ export async function uploadFileToDrive(file: File, folderName: string = "Inbox"
     const res = await drive.files.create({
       requestBody: {
         name: file.name,
-        parents: [folderId], // Uploads to the specific folder
+        parents: [folderId], // Uploads to the specific sub-folder (e.g., "Mary - Inbox")
       },
       media: {
         mimeType: file.type,
         body: stream,
       },
       fields: 'id',
-      supportsAllDrives: true, // <-- ADDED THIS
+      supportsAllDrives: true, // Critical for Shared Drives
     });
 
     console.log(`✅ Uploaded ${file.name} to Drive ID: ${res.data.id}`);
@@ -136,7 +136,7 @@ export async function uploadBufferToDrive(
         body: stream,
       },
       fields: 'id, name, webViewLink',
-      supportsAllDrives: true, // <-- ADDED THIS
+      supportsAllDrives: true,
     });
 
     console.log(`✅ Uploaded ${fileName} to Drive ID: ${res.data.id}`);
@@ -152,7 +152,7 @@ export async function moveFileToFolder(fileId: string, folderName: string): Prom
   try {
     const folderId = await findOrCreateFolder(folderName);
     
-    // Need supportsAllDrives here too
+    // Check file current parents
     const file = await drive.files.get({ 
       fileId, 
       fields: 'parents',
@@ -166,7 +166,7 @@ export async function moveFileToFolder(fileId: string, folderName: string): Prom
       addParents: folderId,
       removeParents: previousParents,
       fields: 'id, parents',
-      supportsAllDrives: true, // <-- ADDED THIS
+      supportsAllDrives: true,
     });
     
     console.log(`✅ Moved file ${fileId} to ${folderName}`);
@@ -181,7 +181,7 @@ export async function moveFileToFolder(fileId: string, folderName: string): Prom
 export async function downloadFileFromDrive(fileId: string): Promise<string | null> {
   try {
     const res = await drive.files.get(
-      { fileId, alt: 'media', supportsAllDrives: true }, // <-- ADDED THIS
+      { fileId, alt: 'media', supportsAllDrives: true },
       { responseType: 'text' }
     );
     return res.data as string;
@@ -197,7 +197,7 @@ export async function getFileMetadata(fileId: string) {
     const res = await drive.files.get({
       fileId,
       fields: 'id, name, mimeType, parents, webViewLink, createdTime',
-      supportsAllDrives: true, // <-- ADDED THIS
+      supportsAllDrives: true,
     });
     return res.data;
   } catch (error) {
@@ -218,11 +218,6 @@ export async function listFilesInFolder(folderId: string) {
       includeItemsFromAllDrives: true,
     };
 
-    if (SHARED_DRIVE_ID) {
-      listRequest.driveId = SHARED_DRIVE_ID;
-      listRequest.corpora = 'drive';
-    }
-
     const res = await drive.files.list(listRequest);
     return res.data.files || [];
   } catch (error) {
@@ -236,7 +231,7 @@ export async function deleteFileFromDrive(fileId: string): Promise<boolean> {
   try {
     await drive.files.delete({
       fileId,
-      supportsAllDrives: true, // <-- ADDED THIS
+      supportsAllDrives: true,
     });
     console.log(`✅ Deleted file ${fileId}`);
     return true;
