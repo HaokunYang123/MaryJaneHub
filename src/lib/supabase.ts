@@ -1,12 +1,10 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Create client only if both values are present
-// This allows the app to work without Supabase (using local storage fallback)
-export const supabase: SupabaseClient | null = (supabaseUrl && supabaseKey) 
-  ? createClient(supabaseUrl, supabaseKey)
-  : null;
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing Supabase URL or Service Role Key in environment variables.');
+}
 
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseKey);
+export const supabase = createClient(supabaseUrl, supabaseKey);

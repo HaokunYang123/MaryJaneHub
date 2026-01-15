@@ -1,0 +1,134 @@
+[
+  {
+    "drive_id": "1BwYuS7i9l3EJTjgtUSxhwGY3QOs9kRxK",
+    "content": "File Name: 123ormal_proposal_nontechnical_NoctWorks.pdf",
+    "metadata": {
+      "isFinancial": true,
+      "summary": "This document appears to be a formal, non-technical proposal from NoctWorks, uploaded to an accounting dashboard, but lacks specific financial details.",
+      "filingCategory": "Uncategorized",
+      "confidence": 0.1,
+      "data": {
+        "vendorName": "NoctWorks",
+        "amount": 0,
+        "date": "",
+        "description": "Formal non-technical proposal from NoctWorks"
+      }
+    },
+    "category": "Uncategorized",
+    "status": "needs_review",
+    "is_duplicate": false,
+    "duplicate_of_id": null,
+    "id": "doc_1768478779295_l5fcogzs3",
+    "created_at": "2026-01-15T12:06:19.295Z"
+  },
+  {
+    "drive_id": "1ojZ0YZtuoSTcFvQAYJu6jAoUJRcVKns2",
+    "content": "File Name: 123ormal_proposal_nontechnical_NoctWorks.pdf",
+    "metadata": {
+      "isFinancial": false,
+      "summary": "The document is a file name indicating a non-technical proposal from NoctWorks, not an invoice or financial transaction document.",
+      "filingCategory": "Administrative",
+      "confidence": 0.1,
+      "data": {
+        "vendorName": "NoctWorks",
+        "amount": 0,
+        "date": "N/A",
+        "description": "Non-technical proposal document."
+      }
+    },
+    "category": "Administrative",
+    "status": "needs_review",
+    "is_duplicate": false,
+    "duplicate_of_id": null,
+    "id": "doc_1768478973337_9lkjdn536",
+    "created_at": "2026-01-15T12:09:33.337Z"
+  },
+  {
+    "drive_id": "1wQScNBQH9y-H0U2waB4mdLndE3LzD7YW",
+    "content": "File Name: 111AC_Invoice_Mary.pdf",
+    "metadata": {
+      "isFinancial": true,
+      "summary": "This document is identified as an invoice, likely from vendor Mary, uploaded to an accounting dashboard, but lacks specific financial details like amount or date.",
+      "filingCategory": "Uncategorized",
+      "confidence": 0.35,
+      "data": {
+        "vendorName": "Mary",
+        "amount": 0,
+        "date": "N/A",
+        "description": "Invoice"
+      }
+    },
+    "category": "Uncategorized",
+    "status": "needs_review",
+    "is_duplicate": false,
+    "duplicate_of_id": null,
+    "id": "doc_1768478988314_ninzkl5er",
+    "created_at": "2026-01-15T12:09:48.314Z"
+  },
+  {
+    "drive_id": "1UC1yiDmrAJSQw9ur3PdZnCEEZaA11kT1",
+    "content": "File Name: 111AC_Invoice_Mary.pdf",
+    "metadata": {
+      "isFinancial": true,
+      "summary": "This document is identified as an invoice from 'Mary' based on the filename, but no financial details such as amount or date are present.",
+      "filingCategory": "Uncategorized",
+      "confidence": 0.4,
+      "data": {
+        "vendorName": "Mary",
+        "amount": 0,
+        "date": "N/A",
+        "description": "Generic invoice document."
+      }
+    },
+    "category": "Uncategorized",
+    "status": "needs_review",
+    "is_duplicate": false,
+    "duplicate_of_id": null,
+    "id": "doc_1768479174434_5jgeesn6f",
+    "created_at": "2026-01-15T12:12:54.435Z"
+  },
+  {
+    "drive_id": "1nwPfo3yLTEX43edoXEqRCitR1FVjz7bU",
+    "content": "File Name: 111AC_Invoice_Mary.pdf",
+    "metadata": {
+      "isFinancial": true,
+      "summary": "The document is identified as an invoice, potentially from 'Mary', based on the filename.",
+      "filingCategory": "Uncategorized",
+      "confidence": 0.3,
+      "data": {
+        "vendorName": "Mary",
+        "amount": 0,
+        "date": "",
+        "description": "Invoice document."
+      }
+    },
+    "category": "Uncategorized",
+    "status": "needs_review",
+    "is_duplicate": false,
+    "duplicate_of_id": null,
+    "id": "doc_1768479487534_d2kq1o7e9",
+    "created_at": "2026-01-15T12:18:07.534Z"
+  },
+  {
+    "drive_id": "1-VwPvnhIIJqtrFFolJIZ7aM_ksdFtXlu",
+    "content": "INVOICE CoolAir HVAC Services\n123 Service Lane\nRiverside, CA 92507\n(555) 555-0147\nbilling@coolairhvac.example\tBILL TO\nMary\n[Address]\n[City, State ZIP]\n[Phone]\n[Email]\nINVOICE DETAILS\nInvoice #: INV-2026-001\nInvoice Date: January 15, 2026\nDue Date: January 22, 2026\nQty Item / Service Description Rate Amount\n1 A/C Service Call Diagnostics and minor repair/adjustment $400.00 $400.00\nSubtotal $400.00\nTax $0.00\nTotal Due $400.00\nPAYMENT DETAILS\nPayment Method: [Cash / Zelle / Check / Card / ACH]\nMake Checks Payable To: CoolAir HVAC Services\nPayment Notes: Please include Invoice #INV-2026-001 with payment.\nNOTES\nThank you for your business.\nAuthorized Signature Date\nThis is a mock invoice for record-keeping purposes.\n\n-- 1 of 1 --\n\n",
+    "metadata": {
+      "isFinancial": true,
+      "summary": "This is an invoice from CoolAir HVAC Services for an A/C service call, diagnostics, and minor repair totaling $400.00.",
+      "filingCategory": "Property Repairs",
+      "confidence": 0.98,
+      "data": {
+        "vendorName": "CoolAir HVAC Services",
+        "amount": 400,
+        "date": "2026-01-15",
+        "description": "A/C Service Call Diagnostics and minor repair/adjustment"
+      }
+    },
+    "category": "Property Repairs",
+    "status": "needs_review",
+    "is_duplicate": false,
+    "duplicate_of_id": null,
+    "id": "doc_1768479692922_hzy4riyfh",
+    "created_at": "2026-01-15T12:21:32.922Z"
+  }
+]
