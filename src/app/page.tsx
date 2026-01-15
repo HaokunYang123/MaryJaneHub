@@ -8,17 +8,16 @@ import { AlertsCard } from "@/components/dashboard/alerts-card";
 import { AccountsReceivableCard } from "@/components/dashboard/accounts-receivable-card";
 import { AccountsPayableCard } from "@/components/dashboard/accounts-payable-card";
 import { InventoryCard } from "@/components/dashboard/inventory-card";
-import { PayrollCard } from "@/components/dashboard/payroll-card";
 
 export default function Home() {
   return (
-    <div className="bg-white text-slate-900 min-h-screen flex flex-col relative">
+    <div className="bg-white text-slate-900 h-screen flex flex-col overflow-hidden">
       <Header />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
 
-        <main className="flex-1 overflow-y-auto bg-slate-50 p-6">
+        <main className="flex-1 overflow-y-auto bg-slate-50 p-6 scroll-smooth">
           {/* Page Heading */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
             <div>
@@ -42,7 +41,6 @@ export default function Home() {
             <AccountsReceivableCard />
             <AccountsPayableCard />
             <InventoryCard />
-            <PayrollCard />
           </div>
         </main>
 

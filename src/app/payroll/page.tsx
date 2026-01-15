@@ -3,6 +3,7 @@
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Footer } from "@/components/layout/footer";
+import { PayrollCard } from "@/components/dashboard/payroll-card";
 
 // Demo payroll data
 const employees = [
@@ -20,11 +21,11 @@ export default function PayrollPage() {
     const totalPayroll = employees.reduce((sum, e) => sum + e.salary, 0);
 
     return (
-        <div className="bg-white text-slate-900 min-h-screen flex flex-col">
+        <div className="bg-white text-slate-900 h-screen flex flex-col overflow-hidden">
             <Header />
             <div className="flex flex-1 overflow-hidden">
                 <Sidebar />
-                <main className="flex-1 overflow-y-auto bg-slate-50 p-6">
+                <main className="flex-1 overflow-y-auto bg-slate-50 p-6 scroll-smooth">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                         <div>
                             <h2 className="text-3xl font-black text-slate-900 tracking-tight">Payroll Management</h2>
@@ -40,23 +41,29 @@ export default function PayrollPage() {
                         </div>
                     </div>
 
-                    {/* Payroll Summary */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                        <div className="bg-[#1B5E20] text-white rounded-xl p-4 shadow-sm">
-                            <p className="text-xs text-white/60 font-bold uppercase">Next Payroll</p>
-                            <p className="text-2xl font-black">March 15, 2024</p>
-                        </div>
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-                            <p className="text-xs text-slate-400 font-bold uppercase">Total Liability</p>
-                            <p className="text-2xl font-black text-slate-800">${totalPayroll.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-                            <p className="text-xs text-slate-400 font-bold uppercase">Active Employees</p>
-                            <p className="text-2xl font-black text-slate-800">{employees.length}</p>
-                        </div>
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-                            <p className="text-xs text-slate-400 font-bold uppercase">YTD Payroll</p>
-                            <p className="text-2xl font-black text-slate-800">$136,840</p>
+                    {/* Payroll Cycle Card */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <PayrollCard />
+                        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                            <h3 className="font-bold text-slate-800 mb-4">Quick Stats</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <p className="text-xs text-slate-400 font-bold uppercase">Total Liability</p>
+                                    <p className="text-2xl font-black text-slate-800">${totalPayroll.toLocaleString()}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-400 font-bold uppercase">Active Employees</p>
+                                    <p className="text-2xl font-black text-slate-800">{employees.length}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-400 font-bold uppercase">YTD Payroll</p>
+                                    <p className="text-2xl font-black text-slate-800">$136,840</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-400 font-bold uppercase">Next Payroll</p>
+                                    <p className="text-xl font-black text-[#1B5E20]">March 15</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
