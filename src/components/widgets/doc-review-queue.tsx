@@ -14,6 +14,11 @@ type DocumentItem = {
     amount?: number;
     invoiceDate?: string;
     date?: string;
+    filingCategory?: string;
+  };
+  metadata?: {
+    filingCategory?: string;
+    amount?: number;
   };
   previewUrl?: string;
 };
@@ -64,6 +69,10 @@ function getAmount(item: DocumentItem) {
 
 function getDate(item: DocumentItem) {
   return item.extracted_data?.invoiceDate || item.extracted_data?.date || "Unknown Date";
+}
+
+function getFilingCategory(item: DocumentItem) {
+  return item.metadata?.filingCategory || item.extracted_data?.filingCategory || "Administrative";
 }
 
 export default function DocReviewQueue({ items, apiBaseUrl = "" }: { items?: DocumentItem[], apiBaseUrl?: string }) {
@@ -179,11 +188,16 @@ export default function DocReviewQueue({ items, apiBaseUrl = "" }: { items?: Doc
               </p>
 
               {/* AUTOMATION TARGET: Tells Mary what happens when she clicks Approve */}
-              <p className="text-[10px] text-[#1B5E20] font-bold mt-1 bg-[#1B5E20]/5 px-2 py-0.5 rounded-md w-fit">
-                {getAmount(item) > 0
-                  ? "SYNC: CREATES QUICKBOOKS BILL"
-                  : "ARCHIVE: ORGANIZES IN DRIVE"}
-              </p>
+              <div className="flex flex-col mt-1">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Destination: Drive/{getFilingCategory(item)}
+                </p>
+                <p className="text-[10px] text-[#1B5E20] font-medium italic mt-0.5">
+                  {getAmount(item) > 0
+                    ? "→ Will sync to QuickBooks & move to folder"
+                    : "→ Will move to folder only"}
+                </p>
+              </div>
 
               <p className="text-sm text-slate-500 mt-1">{getDate(item)}</p>
 

@@ -46,6 +46,21 @@ export interface ExtractedInvoice {
   taxClass: "COGS - Deductible" | "OpEx - Non-Deductible";
 }
 
+// ============================================================
+// SINGLE SOURCE OF TRUTH: Allowed folder/category names
+// ============================================================
+export const ALLOWED_FOLDERS = [
+  "Property Repairs",
+  "Inventory",
+  "Utilities",
+  "Legal",
+  "Payroll",
+  "Administrative",
+  "Taxes"
+] as const;
+
+export type AllowedFolder = typeof ALLOWED_FOLDERS[number];
+
 // --- GEMINI VISION: Convert Buffer to Base64 for the API ---
 function fileToPart(buffer: Buffer, mimeType: string) {
   return {
@@ -64,12 +79,29 @@ const fileToGenerativePart = fileToPart;
  * Uses gemini-2.0-flash-lite for fast, low-cost classification
  */
 export async function runTier1(buffer: Buffer, mimeType: string): Promise<Tier1Result> {
-  const prompt = `Classify this document. 
-  Categories: financial_actionable (bills/receipts that need payment), financial_reference (bank statements, reports), 
-  legal, government, personal, unknown.
+  const prompt = `Classify this document.
+
+  CLASSIFICATION CATEGORIES:
+  - financial_actionable: Bills, invoices, receipts that need payment
+  - financial_reference: Bank statements, reports (no action needed)
+  - legal: Contracts, agreements, legal documents
+  - government: Permits, licenses, government notices
+  - personal: Personal documents
+  - unknown: Cannot determine
+  
+  IMPORTANT: For the 'subcategory' field, you MUST use one of these exact folder names:
+  ${ALLOWED_FOLDERS.join(", ")}
+  
+  - "Property Repairs": Use for any fix or maintenance (e.g., AC Repair, plumbing).
+  - "Utilities": Use for electric, gas, internet, water bills.
+  - "Inventory": Use for supplies, seeds, nutrients, wholesale goods.
+  - "Administrative": Use for permits, notices, or general docs.
+  - "Legal": Use for contracts, agreements, legal documents.
+  - "Payroll": Use for employee wages, benefits, HR docs.
+  - "Taxes": Use for tax forms, filings, or tax-related docs.
   
   Return ONLY raw JSON:
-  {"category": "string", "subcategory": "string", "needs_deep_analysis": boolean}
+  {"category": "string", "subcategory": "one of the exact folder names above", "needs_deep_analysis": boolean}
   
   Set needs_deep_analysis to TRUE only for financial_actionable documents.`;
 
@@ -80,7 +112,7 @@ export async function runTier1(buffer: Buffer, mimeType: string): Promise<Tier1R
     return JSON.parse(cleaned);
   } catch (error) {
     console.error("Tier 1 Classification Failed:", error);
-    return { category: "unknown", subcategory: "error", needs_deep_analysis: false };
+    return { category: "unknown", subcategory: "Administrative", needs_deep_analysis: false };
   }
 }
 
@@ -97,7 +129,16 @@ export async function runTier2(buffer: Buffer, mimeType: string): Promise<Tier2R
   - NEVER prefix categories or names with "Mary" or "Mary's".
   - Use clean category names only.
   
-  CATEGORIES: Property Repairs, Inventory, Utilities, Administrative, Legal, Rent, Payroll, Uncategorized
+  IMPORTANT: For 'filingCategory', you MUST use one of these exact folder names:
+  ${ALLOWED_FOLDERS.join(", ")}
+  
+  - "Property Repairs": AC repair, plumbing, maintenance.
+  - "Utilities": Electric, gas, internet, water.
+  - "Inventory": Seeds, nutrients, supplies, wholesale goods.
+  - "Administrative": Permits, notices, general docs.
+  - "Legal": Contracts, agreements.
+  - "Payroll": Wages, benefits, HR.
+  - "Taxes": Tax forms, filings.
   
   Return ONLY raw JSON:
   {
@@ -105,7 +146,7 @@ export async function runTier2(buffer: Buffer, mimeType: string): Promise<Tier2R
     "amount": number,
     "date": "YYYY-MM-DD",
     "description": "string",
-    "filingCategory": "Property Repairs | Inventory | Utilities | Administrative | Legal | Rent | Payroll"
+    "filingCategory": "one of the exact folder names above"
   }`;
 
   try {
@@ -120,7 +161,7 @@ export async function runTier2(buffer: Buffer, mimeType: string): Promise<Tier2R
       amount: 0,
       date: "",
       description: "Extraction failed",
-      filingCategory: "Uncategorized"
+      filingCategory: "Administrative"
     };
   }
 }
