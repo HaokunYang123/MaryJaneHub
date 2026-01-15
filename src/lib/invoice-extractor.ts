@@ -40,29 +40,24 @@ export interface InvoiceData {
 }
 
 // Helper to parse PDF buffer
-async function getPdfParser() {
-  const pdfModule = await import('pdf-parse');
-  const pdfParse = (pdfModule as unknown as { default?: unknown })?.default ?? pdfModule;
-
-  if (typeof pdfParse === 'function') {
-    return pdfParse as (buf: Buffer) => Promise<{ text: string }>;
-  }
-
-  const maybeFn =
-    (pdfParse as { default?: unknown })?.default ??
-    (pdfParse as { pdfParse?: unknown })?.pdfParse;
-
-  if (typeof maybeFn === 'function') {
-    return maybeFn as (buf: Buffer) => Promise<{ text: string }>;
-  }
-
-  throw new Error('pdf-parse did not export a function');
-}
-
 export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  const pdfParse = await getPdfParser();
-  const data = await pdfParse(buffer);
-  return data.text;
+  const pdfModule = await import('pdf-parse');
+  const PDFParse = (pdfModule as { PDFParse?: unknown }).PDFParse;
+
+  if (typeof PDFParse !== 'function') {
+    throw new Error('PDFParse class not found in pdf-parse module');
+  }
+
+  // pdf-parse v2+ exposes a PDFParse class
+  const parser = new (PDFParse as new (opts: { data: Buffer }) => {
+    getText: () => Promise<{ text: string }>;
+    destroy: () => Promise<void>;
+  })({ data: buffer });
+
+  const textResult = await parser.getText();
+  await parser.destroy();
+
+  return textResult.text;
 }
 
 /**
