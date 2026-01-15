@@ -1,66 +1,93 @@
-// AI Assistant API Route - Powered by Gemini
 import { NextRequest, NextResponse } from 'next/server';
 import { chatModel } from '@/lib/gemini';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase (The Memory)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 // Store conversation history per session
 const conversationHistories = new Map<string, Array<{ role: string; parts: Array<{ text: string }> }>>();
 
 export async function POST(req: NextRequest) {
   try {
-    const { message, context, sessionId = 'default' } = await req.json();
+    const { message, sessionId = 'default' } = await req.json();
 
     if (!message) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
 
-    // Get or create conversation history
+    // 1. SEARCH: Look for relevant files in Supabase
+    let context = "No specific files found in database.";
+    
+    try {
+      const { data: docs } = await supabase
+        .from('documents')
+        .select('content, category, metadata, created_at')
+        .limit(5);
+
+      if (docs && docs.length > 0) {
+        context = docs.map(d => {
+          const meta = d.metadata as { data?: { vendorName?: string; amount?: number } } | null;
+          return `[${d.category || 'Document'}${meta?.data?.vendorName ? ` from ${meta.data.vendorName}` : ''}${meta?.data?.amount ? ` - $${meta.data.amount}` : ''}]: ${(d.content || '').substring(0, 150)}...`;
+        }).join('\n');
+      }
+    } catch (dbError) {
+      console.log('Supabase not configured or error:', dbError);
+      // Continue without database context
+    }
+
+    // 2. Get or create conversation history
     if (!conversationHistories.has(sessionId)) {
       conversationHistories.set(sessionId, [
         {
           role: "user",
-          parts: [{ text: "You are Mary's Financial Assistant. You help manage her cannabis business, 8 entities, and 20 bank accounts. Keep answers short, professional, and helpful. You can help with expense tracking, P&L reports, cash position, inventory, and document search." }],
+          parts: [{ text: "You are Mary's Financial Assistant. You help manage her cannabis business, 8 entities, and 20 bank accounts. Keep answers short, professional, and helpful." }],
         },
         {
           role: "model",
-          parts: [{ text: "Understood. I'm ready to assist Mary with her finances, P&L reports, cash management, and documents. How can I help today?" }],
+          parts: [{ text: "Understood. I'm ready to assist Mary with her finances. How can I help?" }],
         }
       ]);
     }
 
     const history = conversationHistories.get(sessionId)!;
 
-    // Add context hint if provided
-    const contextHint = context ? `[User is on ${context} page] ` : '';
-    const fullMessage = contextHint + message;
+    // 3. Build prompt with context
+    const enrichedMessage = `
+USER QUESTION: "${message}"
 
-    // Start a chat session with history
+RELEVANT FILES/DOCUMENTS:
+${context}
+
+Answer based on the files if relevant, otherwise help with the general question.`;
+
+    // 4. Start chat session
     const chat = chatModel.startChat({ history });
+    const result = await chat.sendMessage(enrichedMessage);
+    const response = result.response.text();
 
-    // Send message and get response
-    const result = await chat.sendMessage(fullMessage);
-    const response = result.response;
-    const text = response.text();
+    // 5. Update history
+    history.push({ role: "user", parts: [{ text: message }] });
+    history.push({ role: "model", parts: [{ text: response }] });
 
-    // Update history with this exchange
-    history.push({ role: "user", parts: [{ text: fullMessage }] });
-    history.push({ role: "model", parts: [{ text }] });
-
-    // Keep history manageable (last 20 exchanges)
-    if (history.length > 42) { // 2 system + 20 exchanges * 2
-      history.splice(2, 2); // Remove oldest exchange (keep system prompt)
+    // Keep history manageable
+    if (history.length > 22) {
+      history.splice(2, 2);
     }
 
-    return NextResponse.json({
-      role: 'assistant',
-      content: text,
-      reply: text
+    return NextResponse.json({ 
+      role: 'assistant', 
+      content: response,
+      reply: response
     });
 
   } catch (error) {
-    console.error('Assistant API Error:', error);
-    
-    // Return actual error in development
+    console.error('Assistant Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
     if (process.env.NODE_ENV === 'development') {
       return NextResponse.json({ 
         error: errorMessage,
