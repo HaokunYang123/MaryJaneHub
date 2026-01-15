@@ -34,6 +34,7 @@ export default function FilesPage() {
   const [pendingDocs, setPendingDocs] = useState<PendingDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [queueError, setQueueError] = useState<string | null>(null);
 
   // Load Pending Docs on Mount
   useEffect(() => {
@@ -42,14 +43,21 @@ export default function FilesPage() {
 
   const fetchPendingDocs = async () => {
     setIsLoading(true);
+    setQueueError(null);
     try {
       const res = await fetch('/api/files/pending');
       const data = await res.json();
-      if (data.documents) {
-        setPendingDocs(data.documents);
+
+      if (!res.ok) {
+        setQueueError(data?.error || 'Failed to load review queue.');
+        setPendingDocs([]);
+        return;
       }
+
+      setPendingDocs(data.documents || []);
     } catch (error) {
       console.error("Failed to fetch documents:", error);
+      setQueueError('Failed to load review queue.');
     } finally {
       setIsLoading(false);
     }
@@ -181,6 +189,12 @@ export default function FilesPage() {
                   {pendingDocs.length} Pending
                 </Badge>
               </div>
+
+              {queueError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {queueError} Check your Supabase keys, schema, and server logs.
+                </div>
+              )}
 
               {isLoading ? (
                 <div className="text-center py-12 border-2 border-dashed rounded-xl bg-slate-50/50">
