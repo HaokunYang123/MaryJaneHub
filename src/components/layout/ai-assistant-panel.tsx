@@ -2,6 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SpeechRecognition = any;
+
+declare global {
+    interface Window {
+        SpeechRecognition: any;
+        webkitSpeechRecognition: any;
+    }
+}
+
 type AssistantMessage = {
     id: string;
     role: "user" | "assistant";
@@ -61,7 +71,7 @@ export function AiAssistantPanel({ variant = "sidebar", onClose }: AssistantPane
         recognition.interimResults = false;
         recognition.maxAlternatives = 1;
 
-        recognition.onresult = (event) => {
+        recognition.onresult = (event: any) => {
             const transcript = event.results?.[0]?.[0]?.transcript || "";
             if (transcript) {
                 setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
@@ -188,11 +198,10 @@ export function AiAssistantPanel({ variant = "sidebar", onClose }: AssistantPane
                             className={`flex gap-2 items-start ${message.role === "assistant" ? "" : "flex-row-reverse ml-auto"}`}
                         >
                             <div
-                                className={`size-7 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold ${
-                                    message.role === "assistant"
-                                        ? "bg-[#1B5E20] text-white"
-                                        : "bg-slate-200 text-slate-600"
-                                }`}
+                                className={`size-7 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold ${message.role === "assistant"
+                                    ? "bg-[#1B5E20] text-white"
+                                    : "bg-slate-200 text-slate-600"
+                                    }`}
                             >
                                 {message.role === "assistant" ? (
                                     <span className="material-symbols-outlined text-white text-[14px]">auto_awesome</span>
@@ -201,11 +210,10 @@ export function AiAssistantPanel({ variant = "sidebar", onClose }: AssistantPane
                                 )}
                             </div>
                             <div
-                                className={`max-w-[85%] rounded-xl p-3 text-xs ${
-                                    message.role === "assistant"
-                                        ? "bg-[#1B5E20]/5 border border-[#1B5E20]/10 text-slate-700"
-                                        : "bg-slate-100 text-slate-700"
-                                }`}
+                                className={`max-w-[85%] rounded-xl p-3 text-xs ${message.role === "assistant"
+                                    ? "bg-[#1B5E20]/5 border border-[#1B5E20]/10 text-slate-700"
+                                    : "bg-slate-100 text-slate-700"
+                                    }`}
                             >
                                 <p>{message.content}</p>
                                 {message.insights?.pnl && (
@@ -264,9 +272,8 @@ export function AiAssistantPanel({ variant = "sidebar", onClose }: AssistantPane
                             <button
                                 type="button"
                                 onClick={toggleListening}
-                                className={`absolute right-2 top-2 size-8 rounded-lg flex items-center justify-center ${
-                                    listening ? "bg-[#D32F2F] text-white animate-pulse" : "bg-white text-[#1B5E20]"
-                                }`}
+                                className={`absolute right-2 top-2 size-8 rounded-lg flex items-center justify-center ${listening ? "bg-[#D32F2F] text-white animate-pulse" : "bg-white text-[#1B5E20]"
+                                    }`}
                                 aria-label={listening ? "Stop voice input" : "Start voice input"}
                             >
                                 <span className="material-symbols-outlined text-sm">mic</span>

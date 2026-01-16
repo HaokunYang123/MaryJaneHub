@@ -21,12 +21,17 @@ export interface Tier1Result {
 }
 
 // Tier 2 Deep Extraction Result
+// Tier 2 Deep Extraction Result
 export interface Tier2Result {
   vendorName: string;
   amount: number;
   date: string;
   description: string;
-  filingCategory: string;
+  // New hierarchical fields for folder structure
+  businessLine: "Property Management" | "Dispensary Operations" | "General";
+  location: string; // e.g., "Tennessee Property", "Phoenix", "HQ"
+  workType: string; // e.g., "Repairs", "Inventory", "Utilities"
+  docType: string;  // e.g., "Invoices", "Receipts"
 }
 
 // Legacy interface
@@ -124,31 +129,27 @@ export async function runTier1(buffer: Buffer, mimeType: string): Promise<Tier1R
  */
 export async function runTier2(buffer: Buffer, mimeType: string): Promise<Tier2Result> {
   const prompt = `Perform DEEP EXTRACTION on this financial document.
-  Extract: Vendor, Amount, Date, and Description.
   
   RULES:
-  - If NO PRICE is found, set amount to 0 and explain in description.
-  - NEVER prefix categories or names with "Mary" or "Mary's".
-  - Use clean category names only.
+  1. Extract Vendor, Amount, Date, and Description.
+  2. Determine the folder hierarchy based on content/address.
   
-  IMPORTANT: For 'filingCategory', you MUST use one of these exact folder names:
-  ${ALLOWED_FOLDERS.join(", ")}
-  
-  - "Property Repairs": AC repair, plumbing, maintenance.
-  - "Utilities": Electric, gas, internet, water.
-  - "Inventory": Seeds, nutrients, supplies, wholesale goods.
-  - "Administrative": Permits, notices, general docs.
-  - "Legal": Contracts, agreements.
-  - "Payroll": Wages, benefits, HR.
-  - "Taxes": Tax forms, filings.
-  
+  HIERARCHY RULES:
+  - businessLine: "Property Management" (if rent/repair/utilities for home/apts), "Dispensary Operations" (if cannabis/packaging/grow), or "General".
+  - location: Name of the property or city (e.g., "Tennessee Property", "Montana Property", "Phoenix Dispensary"). If address is in Nashville/TN, use "Tennessee Property".
+  - workType: The nature of work (e.g., "Repairs", "Utilities", "Inventory", "Legal", "Taxes").
+  - docType: "Invoices", "Receipts", or "Contracts".
+
   Return ONLY raw JSON:
   {
     "vendorName": "string",
     "amount": number,
     "date": "YYYY-MM-DD",
     "description": "string",
-    "filingCategory": "one of the exact folder names above"
+    "businessLine": "string",
+    "location": "string",
+    "workType": "string",
+    "docType": "string"
   }`;
 
   try {
@@ -163,7 +164,10 @@ export async function runTier2(buffer: Buffer, mimeType: string): Promise<Tier2R
       amount: 0,
       date: "",
       description: "Extraction failed",
-      filingCategory: "Administrative"
+      businessLine: "General",
+      location: "Unsorted",
+      workType: "Misc",
+      docType: "Files"
     };
   }
 }
@@ -300,7 +304,8 @@ export async function extractInvoiceData(
 export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   try {
     const pdfModule = await import('pdf-parse');
-    const pdfParse = pdfModule.default || pdfModule;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pdfParse = (pdfModule as any).default || pdfModule;
     if (typeof pdfParse === 'function') {
       const data = await pdfParse(buffer);
       return data.text;

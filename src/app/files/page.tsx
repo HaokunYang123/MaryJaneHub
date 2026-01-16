@@ -245,11 +245,16 @@ function ReviewCard({
   const amount = analysis?.data?.amount || 0;
   const description = analysis?.data?.description || "services";
 
-  // Custom sentence construction for the summary
-  const customSummary = `Invoice from ${vendorName} for ${description} and it is being sent to QuickBooks for book keeping.`;
+  // Construct Path for Display
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const meta = analysis as any;
+  const businessLine = meta?.businessLine || "General";
+  const location = meta?.location || "Unsorted";
+  const workType = meta?.workType || "Misc";
+  const fullPath = `All Files/${businessLine}/${location}/${workType}`;
 
-  // Display path for Drive
-  const drivePath = `Drive/Invoices/${analysis?.category || 'General'}`;
+  // Custom sentence construction for the summary
+  const customSummary = `Invoice from ${vendorName} for ${description}, to be filed under ${location}.`;
 
   return (
     <Card className={`p-5 border-l-4 ${isDuplicate ? 'border-l-red-500 bg-red-50/30' : 'border-l-[#1B5E20]'} shadow-sm hover:shadow-md transition-shadow`}>
@@ -286,11 +291,11 @@ function ReviewCard({
           </span>
         </div>
 
-        {/* Changed from "Destination" to "Category" as requested, showing path */}
-        <div className="flex justify-between items-center">
-          <span className="text-slate-500">Category</span>
-          <Badge variant="outline" className="text-xs font-normal max-w-[150px] truncate" title={drivePath}>
-            {drivePath}
+        {/* Full Path Badge */}
+        <div className="flex flex-col gap-1">
+          <span className="text-slate-500 text-xs">Filing Path</span>
+          <Badge variant="outline" className="text-[10px] font-normal truncate block w-full" title={fullPath}>
+            {fullPath}
           </Badge>
         </div>
 
@@ -298,7 +303,6 @@ function ReviewCard({
           <span className="text-slate-500">Date</span>
           <span className="text-slate-700">{analysis?.data?.date || 'N/A'}</span>
         </div>
-        {/* Confidence score removed */}
       </div>
 
       {/* Custom Sentence Summary */}

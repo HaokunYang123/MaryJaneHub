@@ -8,32 +8,30 @@ export async function POST(request: NextRequest) {
         const file = formData.get('file') as File | null;
         const text = formData.get('text') as string | null;
 
-        let invoiceText: string;
+        let extractedData;
+        let invoiceText = "";
 
         if (file) {
-            // Extract text from uploaded PDF
             const buffer = Buffer.from(await file.arrayBuffer());
-            invoiceText = await extractTextFromPDF(buffer);
+            // Use Vision Model
+            extractedData = await extractInvoiceData(buffer, file.type || 'application/pdf');
+            invoiceText = "(Vision extraction used)";
         } else if (text) {
-            // Use provided text directly
-            invoiceText = text;
+            return NextResponse.json({ error: 'Text-only extraction is deprecated. Please upload a file.' }, { status: 400 });
         } else {
-            return NextResponse.json({ error: 'No file or text provided' }, { status: 400 });
+            return NextResponse.json({ error: 'No file provided' }, { status: 400 });
         }
-
-        // Extract structured data using AI
-        const extractedData = await extractInvoiceData(invoiceText);
 
         // Enhance with category suggestion
         extractedData.suggestedCategory = suggestCategory(
             extractedData.vendorName,
-            extractedData.lineItems[0]?.description
+            extractedData.lineItems?.[0]?.description || ""
         );
 
         return NextResponse.json({
             success: true,
             data: extractedData,
-            rawText: invoiceText.substring(0, 500) + '...' // Preview only
+            rawText: invoiceText
         });
     } catch (error) {
         console.error('Error extracting invoice:', error);

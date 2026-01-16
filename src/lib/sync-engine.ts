@@ -3,7 +3,7 @@ import { getBills, getTokens } from './quickbooks';
 
 export async function syncQuickBooksData(realmId: string) {
   // Ensure we are auth'd for this realm
-  const tokens = getTokens();
+  const tokens = await getTokens();
   if (!tokens || tokens.realmId !== realmId) {
     throw new Error(`Not authenticated for realm ${realmId}`);
   }
@@ -39,7 +39,7 @@ export async function syncQuickBooksData(realmId: string) {
 export async function detectGhostTransactions(realmId: string) {
   // Logic: Find Plaid transactions that have NO matching QB transaction (fuzzy match)
   // This is a simplified "SQL-like" logic. Real fuzzy matching is better done in code or specialized SQL functions.
-  
+
   // 1. Get all Plaid (Bank) transactions for this realm
   const { data: bankTxns } = await supabase
     .from('transactions')
@@ -61,11 +61,11 @@ export async function detectGhostTransactions(realmId: string) {
     // Check if any book item matches (Date +/- 3 days, Amount matches)
     const match = bookTxns.find(bookItem => {
       const amtMatch = Math.abs(bookItem.amount - bankItem.amount) < 0.01;
-      
+
       const d1 = new Date(bankItem.date);
       const d2 = new Date(bookItem.date);
       const dayDiff = Math.abs((d1.getTime() - d2.getTime()) / (1000 * 3600 * 24));
-      
+
       return amtMatch && dayDiff <= 3;
     });
     return !match; // If no match, it's a ghost

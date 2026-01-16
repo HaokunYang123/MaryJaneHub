@@ -29,8 +29,8 @@ interface TokenData {
     refreshTokenExpiresAt: number;
 }
 
-function readTokenData(): TokenData | null {
-    const cookieStore = cookies();
+async function readTokenData(): Promise<TokenData | null> {
+    const cookieStore = await cookies();
     const accessToken = cookieStore.get(COOKIE_NAMES.accessToken)?.value;
     const refreshToken = cookieStore.get(COOKIE_NAMES.refreshToken)?.value;
     const realmId = cookieStore.get(COOKIE_NAMES.realmId)?.value;
@@ -49,8 +49,8 @@ function readTokenData(): TokenData | null {
     };
 }
 
-function writeTokenCookies(tokenData: TokenData) {
-    const cookieStore = cookies();
+async function writeTokenCookies(tokenData: TokenData) {
+    const cookieStore = await cookies();
     const expires = new Date(tokenData.refreshTokenExpiresAt);
     const baseOptions = {
         httpOnly: true,
@@ -82,7 +82,7 @@ export async function exchangeToken(url: string): Promise<{ success: boolean; re
         const accessTokenExpiresAt = Date.now() + (token.expires_in * 1000);
         const refreshTokenExpiresAt = Date.now() + ((token.x_refresh_token_expires_in || DEFAULT_REFRESH_TOKEN_TTL) * 1000);
 
-        writeTokenCookies({
+        await writeTokenCookies({
             accessToken: token.access_token,
             refreshToken: token.refresh_token,
             realmId,
@@ -97,17 +97,17 @@ export async function exchangeToken(url: string): Promise<{ success: boolean; re
     }
 }
 
-export function isAuthenticated(): boolean {
-    const tokenData = readTokenData();
+export async function isAuthenticated(): Promise<boolean> {
+    const tokenData = await readTokenData();
     return !!tokenData && tokenData.refreshTokenExpiresAt > Date.now();
 }
 
-export function getTokens() {
+export async function getTokens() {
     return readTokenData();
 }
 
 async function refreshTokenIfNeeded(): Promise<TokenData> {
-    const tokenData = readTokenData();
+    const tokenData = await readTokenData();
     if (!tokenData) throw new Error('Not authenticated with QuickBooks');
 
     if (tokenData.accessTokenExpiresAt < Date.now() + ACCESS_TOKEN_BUFFER_MS) {
@@ -132,7 +132,7 @@ async function refreshTokenIfNeeded(): Promise<TokenData> {
                 refreshTokenExpiresAt: Date.now() + ((token.x_refresh_token_expires_in || DEFAULT_REFRESH_TOKEN_TTL) * 1000),
             };
 
-            writeTokenCookies(refreshed);
+            await writeTokenCookies(refreshed);
             return refreshed;
         } catch (error) {
             console.error('Token refresh error:', error);

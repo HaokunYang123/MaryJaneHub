@@ -11,7 +11,7 @@ export const runtime = 'nodejs';
 
 // 1. Initialize Gemini instead of OpenAI
 const model = new ChatGoogleGenerativeAI({
-  modelName: 'gemini-2.5-flash',
+  model: 'gemini-2.5-flash',
   temperature: 0,
   apiKey: process.env.GEMINI_API_KEY,
 });
@@ -49,7 +49,7 @@ const vectorStore = new SupabaseVectorStore(
   new GoogleGenerativeAIEmbeddings({
     modelName: "embedding-001",
     apiKey: process.env.GEMINI_API_KEY
-  }), 
+  }),
   {
     client: supabase,
     tableName: 'documents',
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const chatHistory = (history || []).map((msg: any) => 
+    const chatHistory = (history || []).map((msg: any) =>
       msg.role === 'user' ? new HumanMessage(msg.content) : new AIMessage(msg.content)
     );
 
@@ -117,16 +117,16 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('AI Agent Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    
+
     // In development, return detailed error
     if (process.env.NODE_ENV === 'development') {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: errorMessage,
         reply: `Debug Error: ${errorMessage}`
       }, { status: 500 });
     }
-    
-    return NextResponse.json({ 
+
+    return NextResponse.json({
       error: 'Failed to process request',
       reply: "I'm having trouble with that request. Please try again."
     }, { status: 500 });

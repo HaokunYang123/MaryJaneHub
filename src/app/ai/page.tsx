@@ -3,6 +3,17 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 
+// Define SpeechRecognition type for TypeScript
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SpeechRecognition = any;
+
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -46,13 +57,15 @@ export default function AIFullPage() {
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'en-US';
 
-      recognitionRef.current.onresult = (event) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recognitionRef.current.onresult = (event: any) => {
         const transcript = Array.from(event.results)
-          .map(result => result[0].transcript)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .map((result: any) => result[0].transcript)
           .join('');
-        
+
         setInputValue(transcript);
-        
+
         if (event.results[0].isFinal) {
           sendMessage(transcript);
           setIsListening(false);
@@ -92,24 +105,24 @@ export default function AIFullPage() {
       const response = await fetch('/api/assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           message: userMessage,
           context: 'full'
         })
       });
 
       const data = await response.json();
-      
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
+
+      setMessages(prev => [...prev, {
+        role: 'assistant',
         content: data.content || data.reply || "I couldn't process that.",
         action: data.action
       }]);
     } catch (error) {
       console.error('Error:', error);
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Sorry, I encountered an error. Please try again.' 
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'Sorry, I encountered an error. Please try again.'
       }]);
     } finally {
       setIsProcessing(false);
@@ -139,8 +152,8 @@ export default function AIFullPage() {
       {/* Header */}
       <header className="bg-[#1B5E20] text-white px-6 py-4 flex items-center justify-between shadow-lg">
         <div className="flex items-center gap-4">
-          <Link 
-            href="/" 
+          <Link
+            href="/"
             className="p-2 hover:bg-white/10 rounded-lg transition-colors"
             title="Back to Dashboard"
           >
@@ -153,7 +166,7 @@ export default function AIFullPage() {
             <p className="text-green-200 text-sm">Ask me anything about your finances</p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-4">
           <button
             onClick={clearChat}
@@ -180,10 +193,10 @@ export default function AIFullPage() {
                 </div>
                 <h2 className="text-3xl font-bold text-slate-800 mb-2">Hi Mary, how can I help?</h2>
                 <p className="text-slate-500 mb-8 max-w-lg mx-auto">
-                  I can help you manage your finances, track expenses, find documents, check inventory, and more. 
+                  I can help you manage your finances, track expenses, find documents, check inventory, and more.
                   Just ask me anything!
                 </p>
-                
+
                 {/* Suggestion chips */}
                 <div className="flex flex-wrap justify-center gap-3 max-w-2xl mx-auto">
                   {SUGGESTION_CHIPS.map((suggestion) => (
@@ -215,11 +228,10 @@ export default function AIFullPage() {
                       )}
                     </div>
                   )}
-                  <div className={`p-4 rounded-2xl shadow-sm ${
-                    msg.role === 'user'
-                      ? 'bg-[#1B5E20] text-white rounded-tr-sm'
-                      : 'bg-white border border-slate-200 rounded-tl-sm'
-                  }`}>
+                  <div className={`p-4 rounded-2xl shadow-sm ${msg.role === 'user'
+                    ? 'bg-[#1B5E20] text-white rounded-tr-sm'
+                    : 'bg-white border border-slate-200 rounded-tl-sm'
+                    }`}>
                     <p className="whitespace-pre-wrap">{msg.content}</p>
                   </div>
                 </div>
@@ -257,11 +269,10 @@ export default function AIFullPage() {
                 type="button"
                 onClick={toggleListening}
                 disabled={!recognitionRef.current}
-                className={`p-4 rounded-full transition-all shadow-md ${
-                  isListening 
-                    ? 'bg-red-500 animate-pulse scale-110' 
-                    : 'bg-[#1B5E20] hover:bg-[#154a19]'
-                } text-white disabled:opacity-50 disabled:cursor-not-allowed`}
+                className={`p-4 rounded-full transition-all shadow-md ${isListening
+                  ? 'bg-red-500 animate-pulse scale-110'
+                  : 'bg-[#1B5E20] hover:bg-[#154a19]'
+                  } text-white disabled:opacity-50 disabled:cursor-not-allowed`}
                 title={recognitionRef.current ? (isListening ? 'Stop listening' : 'Start voice input') : 'Voice not supported'}
               >
                 {isListening ? (
@@ -274,7 +285,7 @@ export default function AIFullPage() {
                   </svg>
                 )}
               </button>
-              
+
               {/* Text input */}
               <div className="flex-1 relative">
                 <input
@@ -287,7 +298,7 @@ export default function AIFullPage() {
                   disabled={isProcessing || isListening}
                 />
               </div>
-              
+
               {/* Send button */}
               <button
                 type="submit"
@@ -299,7 +310,7 @@ export default function AIFullPage() {
                 </svg>
               </button>
             </form>
-            
+
             <p className="text-center text-xs text-slate-400 mt-3">
               Press Enter to send • Click microphone for voice input
             </p>

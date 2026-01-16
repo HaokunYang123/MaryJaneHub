@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createJournalEntry, isAuthenticated } from '@/lib/quickbooks';
 
 export async function POST(request: NextRequest) {
-    if (!isAuthenticated()) {
+    if (!(await isAuthenticated())) {
         return NextResponse.json({ error: 'Not authenticated with QuickBooks' }, { status: 401 });
     }
 

@@ -39,7 +39,11 @@ export async function processDocumentBatch(files: BatchFile[]) {
       const { data: doc, error } = await supabase.from('documents').insert({
         drive_id: file.driveId,
         metadata: finalData,
-        category: (finalData as Tier2Result).filingCategory || classification.subcategory || 'Uncategorized',
+        // Construct a category string for the UI/Database from the new hierarchy
+        // e.g. "Property Management - Tennessee Property"
+        category: (finalData as any).businessLine
+          ? `${(finalData as any).businessLine} - ${(finalData as any).location}`
+          : classification.subcategory || 'Uncategorized',
         status: status,
         is_duplicate: false,
       }).select().single();
@@ -182,11 +186,19 @@ export async function confirmAndExecute(documentId: string) {
 
   try {
     // Move file in Drive
-    // Uses nested path: "Invoices/{category}" for clean organization
+    // Uses nested path: "All Files/Business Line/Location/Work Type/Doc Type"
     try {
-      // Put everything under "Invoices" folder, then the specific category
-      // e.g. "Invoices/Property Invoices" or "Invoices/Utility Invoices"
-      const targetFolder = `Invoices/${analysis.filingCategory}`;
+      // Cast metadata to access new Tier 2 fields (Use any if typing is tricky during transition)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const meta = analysis as any;
+
+      const businessLine = meta.businessLine || "General";
+      const location = meta.location || "Unsorted";
+      const workType = meta.workType || "Misc";
+      const docType = meta.docType || "Files";
+
+      const targetFolder = `All Files/${businessLine}/${location}/${workType}/${docType}`;
+
       await moveFileToFolder(doc.drive_id, targetFolder);
       console.log(`📁 Moved file to ${targetFolder}`);
     } catch (driveError) {
@@ -204,7 +216,8 @@ export async function confirmAndExecute(documentId: string) {
     }
 
     console.log(`✅ Document ${documentId} processed`);
-    return { success: true, analysis };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { success: true, targetPath: `All Files/${(analysis as any).businessLine || 'General'}/...` };
 
   } catch (error) {
     console.error("Execution Failed:", error);
@@ -230,7 +243,7 @@ export async function rejectDocument(documentId: string) {
   // Move in Drive
   if (doc?.drive_id) {
     try {
-      await moveFileToFolder(doc.drive_id, 'Rejected');
+      await moveFileToFolder(doc.drive_id, 'All Files/Rejected');
     } catch (driveError) {
       console.log('Drive move skipped:', driveError);
     }

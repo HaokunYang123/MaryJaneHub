@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
 
     // Check authentication status
     if (action === 'status') {
-        return NextResponse.json({ authenticated: isAuthenticated() });
+        return NextResponse.json({ authenticated: await isAuthenticated() });
     }
 
     // Handle OAuth callback

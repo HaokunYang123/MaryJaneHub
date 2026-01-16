@@ -12,6 +12,7 @@ const getCredentials = () => {
       return {};
     }
     const credentials = JSON.parse(jsonKey);
+    // Fix newlines in private key if present
     if (credentials.private_key) {
       credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
     }
@@ -29,11 +30,12 @@ const auth = new google.auth.GoogleAuth({
 
 const drive = google.drive({ version: 'v3', auth });
 
-// --- Helper: Find or Create Folder (Recursive for Paths) ---
-// Supports paths like "Invoices/Property Invoices"
+// --- Helper: Find or Create Path (Recursive) ---
 async function findOrCreatePath(path: string): Promise<string> {
+  // Split path into segments (e.g. ["All Files", "Property Management", "Tennessee"])
   const folders = path.split('/').filter(p => p.trim() !== '');
-  let parentId = ROOT_ID;
+
+  let parentId = ROOT_ID; // Start search from the configured root
 
   for (const folderName of folders) {
     parentId = await findOrCreateSingleFolder(folderName, parentId);
@@ -42,7 +44,6 @@ async function findOrCreatePath(path: string): Promise<string> {
   return parentId!;
 }
 
-// Find or create a single folder within a parent
 async function findOrCreateSingleFolder(name: string, parentId?: string): Promise<string> {
   try {
     // 1. Search for existing folder
@@ -66,7 +67,7 @@ async function findOrCreateSingleFolder(name: string, parentId?: string): Promis
     }
 
     // 2. Create if not found
-    console.log(`📁 Creating folder '${name}' inside '${parentId || 'Root'}'...`);
+    console.log(`📁 Creating folder '${name}' inside parent '${parentId || 'Root'}'...`);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const createRequest: any = {
@@ -87,15 +88,9 @@ async function findOrCreateSingleFolder(name: string, parentId?: string): Promis
   }
 }
 
-// Legacy helper - uses path system now
-async function findOrCreateFolder(name: string): Promise<string> {
-  return findOrCreatePath(name);
-}
-
-// --- Upload Function ---
-export async function uploadFileToDrive(file: File, folderPath: string = "Inbox"): Promise<string | null> {
+// --- Upload to "Unprocessed Files" by default ---
+export async function uploadFileToDrive(file: File, folderPath: string = "Unprocessed Files"): Promise<string | null> {
   try {
-    // Now supports paths like "Inbox" or "Invoices/Property Invoices"
     const folderId = await findOrCreatePath(folderPath);
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -116,7 +111,7 @@ export async function uploadFileToDrive(file: File, folderPath: string = "Inbox"
       supportsAllDrives: true,
     });
 
-    console.log(`✅ Uploaded ${file.name} (ID: ${res.data.id})`);
+    console.log(`✅ Uploaded ${file.name} to '${folderPath}' (ID: ${res.data.id})`);
     return res.data.id || null;
   } catch (error) {
     console.error("❌ Upload Error:", error);
@@ -124,13 +119,11 @@ export async function uploadFileToDrive(file: File, folderPath: string = "Inbox"
   }
 }
 
-// --- Move File to Folder (Supports Nested Paths) ---
+// --- Move File (Used for organizing into All Files) ---
 export async function moveFileToFolder(fileId: string, folderPath: string): Promise<string | null> {
   try {
-    // 1. Get destination folder ID (handles paths like "Invoices/Property Invoices")
     const folderId = await findOrCreatePath(folderPath);
 
-    // 2. Get current parents to remove them
     const file = await drive.files.get({
       fileId,
       fields: 'parents',
@@ -139,7 +132,6 @@ export async function moveFileToFolder(fileId: string, folderPath: string): Prom
 
     const previousParents = file.data.parents?.join(',') || '';
 
-    // 3. Move
     await drive.files.update({
       fileId,
       addParents: folderId,
@@ -147,8 +139,6 @@ export async function moveFileToFolder(fileId: string, folderPath: string): Prom
       fields: 'id, parents',
       supportsAllDrives: true,
     });
-
-    console.log(`✅ Moved file ${fileId} to ${folderPath}`);
     return folderId;
   } catch (error) {
     console.error('Drive Move Error:', error);
@@ -156,32 +146,20 @@ export async function moveFileToFolder(fileId: string, folderPath: string): Prom
   }
 }
 
-// --- Other Helpers ---
+// Legacy helper compatibility if needed, but preferable to use findOrCreatePath directly or the exports above
+// Re-export specific helpers if other files rely on them by name, or refactor them.
+// The previous code had getInboxFolderId and getFolderByStatus. Let's keep them for compatibility but using the new logic.
 
-export async function downloadFileFromDrive(fileId: string): Promise<string | null> {
-  try {
-    const res = await drive.files.get(
-      { fileId, alt: 'media', supportsAllDrives: true },
-      { responseType: 'text' }
-    );
-    return res.data as string;
-  } catch (error) {
-    console.error('Drive Download Error:', error);
-    return null;
-  }
-}
-
-// Updated Helper names - clean names, no "Mary -" prefixes
 export async function getInboxFolderId(): Promise<string | null> {
   try { return await findOrCreatePath('Inbox'); } catch { return null; }
 }
 
 export async function getFolderByStatus(status: 'pending' | 'processed' | 'rejected'): Promise<string | null> {
-  // Clean folder names without "Mary -" prefix
+  // Map internal status to filesystem folders
   const map = {
-    pending: 'Pending Review',
-    processed: 'Processed',
-    rejected: 'Rejected'
+    pending: 'Unprocessed Files', // "Review Queue" logic usually implies waiting, but user said "Unprocessed Files" for logic
+    processed: 'All Files',       // General bucket, though files go deeper usually
+    rejected: 'All Files/Rejected'
   };
   try { return await findOrCreatePath(map[status]); } catch { return null; }
 }

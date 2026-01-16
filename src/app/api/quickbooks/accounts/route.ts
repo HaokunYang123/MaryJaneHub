@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getExpenseAccounts, isAuthenticated } from '@/lib/quickbooks';
 
 export async function GET() {
-    if (!isAuthenticated()) {
+    if (!(await isAuthenticated())) {
         return NextResponse.json({ error: 'Not authenticated with QuickBooks' }, { status: 401 });
     }
 

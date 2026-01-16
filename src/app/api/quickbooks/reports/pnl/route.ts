@@ -38,7 +38,7 @@ function extractReportValue(report: unknown, label: string): number {
 }
 
 export async function GET(request: NextRequest) {
-    if (!isAuthenticated()) {
+    if (!(await isAuthenticated())) {
         return NextResponse.json({ error: 'Not authenticated with QuickBooks' }, { status: 401 });
     }
 
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
             .filter(Boolean);
 
         if (entityIds.length === 0) {
-            const token = getTokens();
+            const token = await getTokens();
             if (token?.realmId) {
                 entityIds.push(token.realmId);
             }

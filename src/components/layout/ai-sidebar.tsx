@@ -3,6 +3,16 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SpeechRecognition = any;
+
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -25,7 +35,7 @@ export function AiSidebar({ pageContext = 'dashboard' }: AiSidebarProps) {
   const [inputValue, setInputValue] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -61,13 +71,15 @@ export function AiSidebar({ pageContext = 'dashboard' }: AiSidebarProps) {
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'en-US';
 
-      recognitionRef.current.onresult = (event) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recognitionRef.current.onresult = (event: any) => {
         const transcript = Array.from(event.results)
-          .map(result => result[0].transcript)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .map((result: any) => result[0].transcript)
           .join('');
-        
+
         setInputValue(transcript);
-        
+
         if (event.results[0].isFinal) {
           sendMessage(transcript);
           setIsListening(false);
@@ -87,10 +99,10 @@ export function AiSidebar({ pageContext = 'dashboard' }: AiSidebarProps) {
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isDragging || !containerRef.current) return;
-    
+
     const containerRect = containerRef.current.getBoundingClientRect();
     const newWidth = containerRect.right - e.clientX;
-    
+
     if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
       setWidth(newWidth);
     }
@@ -128,24 +140,24 @@ export function AiSidebar({ pageContext = 'dashboard' }: AiSidebarProps) {
       const response = await fetch('/api/assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           message: userMessage,
           context: pageContext
         })
       });
 
       const data = await response.json();
-      
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
+
+      setMessages(prev => [...prev, {
+        role: 'assistant',
         content: data.content || data.reply || "I couldn't process that.",
         action: data.action
       }]);
     } catch (error) {
       console.error('Error:', error);
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Sorry, I encountered an error. Please try again.' 
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'Sorry, I encountered an error. Please try again.'
       }]);
     } finally {
       setIsProcessing(false);
@@ -196,9 +208,8 @@ export function AiSidebar({ pageContext = 'dashboard' }: AiSidebarProps) {
       {/* Resize handle */}
       <div
         onMouseDown={handleMouseDown}
-        className={`w-1 bg-slate-200 hover:bg-[#1B5E20] cursor-col-resize transition-colors flex items-center justify-center group ${
-          isDragging ? 'bg-[#1B5E20]' : ''
-        }`}
+        className={`w-1 bg-slate-200 hover:bg-[#1B5E20] cursor-col-resize transition-colors flex items-center justify-center group ${isDragging ? 'bg-[#1B5E20]' : ''
+          }`}
       >
         <div className="w-1 h-8 bg-slate-400 group-hover:bg-[#1B5E20] rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
       </div>
@@ -249,11 +260,10 @@ export function AiSidebar({ pageContext = 'dashboard' }: AiSidebarProps) {
 
           {messages.map((msg, idx) => (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[90%] p-2.5 rounded-lg text-sm ${
-                msg.role === 'user'
-                  ? 'bg-[#1B5E20] text-white rounded-tr-sm'
-                  : 'bg-slate-100 text-slate-800 rounded-tl-sm'
-              }`}>
+              <div className={`max-w-[90%] p-2.5 rounded-lg text-sm ${msg.role === 'user'
+                ? 'bg-[#1B5E20] text-white rounded-tr-sm'
+                : 'bg-slate-100 text-slate-800 rounded-tl-sm'
+                }`}>
                 {msg.content}
               </div>
             </div>
@@ -281,11 +291,10 @@ export function AiSidebar({ pageContext = 'dashboard' }: AiSidebarProps) {
               type="button"
               onClick={toggleListening}
               disabled={!recognitionRef.current}
-              className={`p-2 rounded-lg transition-all ${
-                isListening 
-                  ? 'bg-red-500 text-white animate-pulse' 
-                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-              } disabled:opacity-50`}
+              className={`p-2 rounded-lg transition-all ${isListening
+                ? 'bg-red-500 text-white animate-pulse'
+                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                } disabled:opacity-50`}
               title="Voice input"
             >
               <span className="material-symbols-outlined text-sm">
