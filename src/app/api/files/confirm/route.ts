@@ -3,13 +3,14 @@ import { confirmAndExecute } from '@/lib/ai/secretary';
 
 export async function POST(req: NextRequest) {
   try {
-    const { documentId } = await req.json();
-    
+    const { documentId, destination } = await req.json();
+
     if (!documentId) {
       return NextResponse.json({ error: 'Document ID required' }, { status: 400 });
     }
-    
-    const result = await confirmAndExecute(documentId);
+
+    // Pass destination to confirmAndExecute (defaults to 'quickbooks')
+    const result = await confirmAndExecute(documentId, destination || 'quickbooks');
     return NextResponse.json(result);
   } catch (error) {
     console.error('Confirm Error:', error);

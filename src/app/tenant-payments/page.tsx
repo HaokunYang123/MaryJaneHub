@@ -1,8 +1,10 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Footer } from "@/components/layout/footer";
+import { AnimatedNumber, AnimatedCurrency } from "@/components/ui/animated-number";
 
 // Demo tenant data
 const tenants = [
@@ -14,6 +16,20 @@ const tenants = [
 ];
 
 export default function TenantPaymentsPage() {
+    const [isVisible, setIsVisible] = useState(false);
+    const pageRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) setIsVisible(true);
+            },
+            { threshold: 0.1 }
+        );
+        if (pageRef.current) observer.observe(pageRef.current);
+        return () => observer.disconnect();
+    }, []);
+
     const totalMonthlyRent = tenants.reduce((sum, t) => sum + t.rent, 0);
     const collected = tenants.filter(t => t.status === 'paid').reduce((sum, t) => sum + t.rent, 0);
     const pending = tenants.filter(t => t.status !== 'paid').reduce((sum, t) => sum + t.rent, 0);
@@ -23,7 +39,7 @@ export default function TenantPaymentsPage() {
             <Header />
             <div className="flex flex-1 overflow-hidden">
                 <Sidebar />
-                <main className="flex-1 overflow-y-auto bg-slate-50 p-6">
+                <main ref={pageRef} className="flex-1 overflow-y-auto bg-slate-50 p-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                         <div>
                             <h2 className="text-3xl font-black text-slate-900 tracking-tight">Tenant Payments</h2>
@@ -36,21 +52,29 @@ export default function TenantPaymentsPage() {
 
                     {/* Summary Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                        <div className={`bg-white rounded-xl border border-slate-200 p-4 shadow-sm transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                             <p className="text-xs text-slate-400 font-bold uppercase">Monthly Rent</p>
-                            <p className="text-2xl font-black text-slate-800">${totalMonthlyRent.toLocaleString()}</p>
+                            <p className="text-2xl font-black text-slate-800 tabular-nums">
+                                {isVisible ? <AnimatedCurrency value={totalMonthlyRent} duration={1400} /> : '$0.00'}
+                            </p>
                         </div>
-                        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                        <div className={`bg-green-50 border border-green-200 rounded-xl p-4 transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '100ms' }}>
                             <p className="text-xs text-green-600 font-bold uppercase">Collected</p>
-                            <p className="text-2xl font-black text-green-700">${collected.toLocaleString()}</p>
+                            <p className="text-2xl font-black text-green-700 tabular-nums">
+                                {isVisible ? <AnimatedCurrency value={collected} duration={1400} delay={100} /> : '$0.00'}
+                            </p>
                         </div>
-                        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                        <div className={`bg-orange-50 border border-orange-200 rounded-xl p-4 transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '200ms' }}>
                             <p className="text-xs text-orange-600 font-bold uppercase">Pending</p>
-                            <p className="text-2xl font-black text-orange-700">${pending.toLocaleString()}</p>
+                            <p className="text-2xl font-black text-orange-700 tabular-nums">
+                                {isVisible ? <AnimatedCurrency value={pending} duration={1400} delay={200} /> : '$0.00'}
+                            </p>
                         </div>
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                        <div className={`bg-white rounded-xl border border-slate-200 p-4 shadow-sm transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '300ms' }}>
                             <p className="text-xs text-slate-400 font-bold uppercase">Properties</p>
-                            <p className="text-2xl font-black text-slate-800">2 locations</p>
+                            <p className="text-2xl font-black text-slate-800">
+                                {isVisible ? <><AnimatedNumber value={2} duration={1000} delay={300} /> locations</> : '0 locations'}
+                            </p>
                         </div>
                     </div>
 
@@ -73,10 +97,12 @@ export default function TenantPaymentsPage() {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {tenants.map((tenant, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-50">
+                                    <tr key={idx} className={`hover:bg-slate-50 transition-all duration-500 ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`} style={{ transitionDelay: `${400 + idx * 80}ms` }}>
                                         <td className="px-6 py-4 font-medium">{tenant.name}</td>
                                         <td className="px-6 py-4 text-slate-600">{tenant.property}</td>
-                                        <td className="px-6 py-4 text-right font-bold">${tenant.rent.toLocaleString()}</td>
+                                        <td className="px-6 py-4 text-right font-bold tabular-nums">
+                                            {isVisible ? <AnimatedCurrency value={tenant.rent} duration={1000} delay={400 + idx * 80} /> : '$0.00'}
+                                        </td>
                                         <td className="px-6 py-4 text-center">{tenant.dueDate}</td>
                                         <td className="px-6 py-4 text-center">
                                             <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${tenant.status === 'paid' ? 'bg-green-100 text-green-600' :

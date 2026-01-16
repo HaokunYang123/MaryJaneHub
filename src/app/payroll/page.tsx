@@ -1,9 +1,11 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Footer } from "@/components/layout/footer";
 import { PayrollCard } from "@/components/dashboard/payroll-card";
+import { AnimatedNumber, AnimatedCurrency } from "@/components/ui/animated-number";
 
 // Demo payroll data
 const employees = [
@@ -17,7 +19,23 @@ const employees = [
     { name: 'Robert Taylor', role: 'Security Lead', salary: 3600, status: 'active', hoursThisPeriod: 88 },
 ];
 
+const ytdPayroll = 136840;
+
 export default function PayrollPage() {
+    const [isVisible, setIsVisible] = useState(false);
+    const pageRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) setIsVisible(true);
+            },
+            { threshold: 0.1 }
+        );
+        if (pageRef.current) observer.observe(pageRef.current);
+        return () => observer.disconnect();
+    }, []);
+
     const totalPayroll = employees.reduce((sum, e) => sum + e.salary, 0);
 
     return (
@@ -25,7 +43,7 @@ export default function PayrollPage() {
             <Header />
             <div className="flex flex-1 overflow-hidden">
                 <Sidebar />
-                <main className="flex-1 overflow-y-auto bg-slate-50 p-6 scroll-smooth">
+                <main ref={pageRef} className="flex-1 overflow-y-auto bg-slate-50 p-6 scroll-smooth">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                         <div>
                             <h2 className="text-3xl font-black text-slate-900 tracking-tight">Payroll Management</h2>
@@ -44,22 +62,28 @@ export default function PayrollPage() {
                     {/* Payroll Cycle Card */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                         <PayrollCard />
-                        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                        <div className={`bg-white rounded-xl border border-slate-200 p-6 shadow-sm transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '100ms' }}>
                             <h3 className="font-bold text-slate-800 mb-4">Quick Stats</h3>
                             <div className="grid grid-cols-2 gap-4">
-                                <div>
+                                <div className={`transition-all duration-500 ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`} style={{ transitionDelay: '200ms' }}>
                                     <p className="text-xs text-slate-400 font-bold uppercase">Total Liability</p>
-                                    <p className="text-2xl font-black text-slate-800">${totalPayroll.toLocaleString()}</p>
+                                    <p className="text-2xl font-black text-slate-800 tabular-nums">
+                                        {isVisible ? <AnimatedCurrency value={totalPayroll} duration={1400} delay={200} /> : '$0.00'}
+                                    </p>
                                 </div>
-                                <div>
+                                <div className={`transition-all duration-500 ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`} style={{ transitionDelay: '300ms' }}>
                                     <p className="text-xs text-slate-400 font-bold uppercase">Active Employees</p>
-                                    <p className="text-2xl font-black text-slate-800">{employees.length}</p>
+                                    <p className="text-2xl font-black text-slate-800 tabular-nums">
+                                        {isVisible ? <AnimatedNumber value={employees.length} duration={1200} delay={300} /> : '0'}
+                                    </p>
                                 </div>
-                                <div>
+                                <div className={`transition-all duration-500 ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`} style={{ transitionDelay: '400ms' }}>
                                     <p className="text-xs text-slate-400 font-bold uppercase">YTD Payroll</p>
-                                    <p className="text-2xl font-black text-slate-800">$136,840</p>
+                                    <p className="text-2xl font-black text-slate-800 tabular-nums">
+                                        {isVisible ? <AnimatedCurrency value={ytdPayroll} duration={1400} delay={400} /> : '$0.00'}
+                                    </p>
                                 </div>
-                                <div>
+                                <div className={`transition-all duration-500 ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`} style={{ transitionDelay: '500ms' }}>
                                     <p className="text-xs text-slate-400 font-bold uppercase">Next Payroll</p>
                                     <p className="text-xl font-black text-[#1B5E20]">March 15</p>
                                 </div>
@@ -87,7 +111,11 @@ export default function PayrollPage() {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {employees.map((emp, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-50">
+                                    <tr
+                                        key={idx}
+                                        className={`hover:bg-slate-50 transition-all duration-500 ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`}
+                                        style={{ transitionDelay: `${600 + idx * 60}ms` }}
+                                    >
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="size-8 rounded-full bg-[#1B5E20] flex items-center justify-center text-white text-xs font-bold">
@@ -97,8 +125,12 @@ export default function PayrollPage() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-slate-600">{emp.role}</td>
-                                        <td className="px-6 py-4 text-center">{emp.hoursThisPeriod}h</td>
-                                        <td className="px-6 py-4 text-right font-bold">${emp.salary.toLocaleString()}</td>
+                                        <td className="px-6 py-4 text-center tabular-nums">
+                                            {isVisible ? <AnimatedNumber value={emp.hoursThisPeriod} duration={1000} delay={600 + idx * 60} /> : '0'}h
+                                        </td>
+                                        <td className="px-6 py-4 text-right font-bold tabular-nums">
+                                            {isVisible ? <AnimatedCurrency value={emp.salary} duration={1000} delay={600 + idx * 60} /> : '$0.00'}
+                                        </td>
                                         <td className="px-6 py-4 text-center">
                                             <span className="px-2 py-0.5 bg-green-100 text-green-600 rounded-full text-xs font-bold">
                                                 ACTIVE

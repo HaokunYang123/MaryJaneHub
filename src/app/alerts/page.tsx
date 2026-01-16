@@ -1,8 +1,10 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Footer } from "@/components/layout/footer";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 
 // Demo alerts data
 const alerts = [
@@ -16,6 +18,20 @@ const alerts = [
 ];
 
 export default function AlertsPage() {
+    const [isVisible, setIsVisible] = useState(false);
+    const pageRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) setIsVisible(true);
+            },
+            { threshold: 0.1 }
+        );
+        if (pageRef.current) observer.observe(pageRef.current);
+        return () => observer.disconnect();
+    }, []);
+
     const critical = alerts.filter(a => a.type === 'error').length;
     const warnings = alerts.filter(a => a.type === 'warning').length;
 
@@ -24,7 +40,7 @@ export default function AlertsPage() {
             <Header />
             <div className="flex flex-1 overflow-hidden">
                 <Sidebar />
-                <main className="flex-1 overflow-y-auto bg-slate-50 p-6">
+                <main ref={pageRef} className="flex-1 overflow-y-auto bg-slate-50 p-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                         <div>
                             <h2 className="text-3xl font-black text-slate-900 tracking-tight">Alerts & Notifications</h2>
@@ -37,23 +53,29 @@ export default function AlertsPage() {
 
                     {/* Summary Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                        <div className={`bg-red-50 border border-red-200 rounded-xl p-4 transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                             <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-red-600">error</span>
+                                <span className={`material-symbols-outlined text-red-600 transition-all duration-500 ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-0'}`}>error</span>
                                 <p className="text-xs text-red-600 font-bold uppercase">Critical</p>
                             </div>
-                            <p className="text-3xl font-black text-red-700 mt-1">{critical}</p>
+                            <p className="text-3xl font-black text-red-700 mt-1 tabular-nums">
+                                {isVisible ? <AnimatedNumber value={critical} duration={1200} /> : '0'}
+                            </p>
                         </div>
-                        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                        <div className={`bg-orange-50 border border-orange-200 rounded-xl p-4 transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '100ms' }}>
                             <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-orange-600">warning</span>
+                                <span className={`material-symbols-outlined text-orange-600 transition-all duration-500 ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-0'}`} style={{ transitionDelay: '100ms' }}>warning</span>
                                 <p className="text-xs text-orange-600 font-bold uppercase">Warnings</p>
                             </div>
-                            <p className="text-3xl font-black text-orange-700 mt-1">{warnings}</p>
+                            <p className="text-3xl font-black text-orange-700 mt-1 tabular-nums">
+                                {isVisible ? <AnimatedNumber value={warnings} duration={1200} delay={100} /> : '0'}
+                            </p>
                         </div>
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                        <div className={`bg-white rounded-xl border border-slate-200 p-4 shadow-sm transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '200ms' }}>
                             <p className="text-xs text-slate-400 font-bold uppercase">Total Alerts</p>
-                            <p className="text-3xl font-black text-slate-800 mt-1">{alerts.length}</p>
+                            <p className="text-3xl font-black text-slate-800 mt-1 tabular-nums">
+                                {isVisible ? <AnimatedNumber value={alerts.length} duration={1200} delay={200} /> : '0'}
+                            </p>
                         </div>
                     </div>
 
@@ -65,11 +87,11 @@ export default function AlertsPage() {
                         </div>
                         <div className="divide-y divide-slate-100">
                             {alerts.map((alert, idx) => (
-                                <div key={idx} className={`p-4 flex items-start gap-4 hover:bg-slate-50 ${alert.type === 'error' ? 'border-l-4 border-red-500' :
+                                <div key={idx} className={`p-4 flex items-start gap-4 hover:bg-slate-50 transition-all duration-500 ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'} ${alert.type === 'error' ? 'border-l-4 border-red-500' :
                                         alert.type === 'warning' ? 'border-l-4 border-orange-500' :
                                             alert.type === 'success' ? 'border-l-4 border-green-500' :
                                                 'border-l-4 border-blue-500'
-                                    }`}>
+                                    }`} style={{ transitionDelay: `${300 + idx * 80}ms` }}>
                                     <span className={`material-symbols-outlined mt-0.5 ${alert.type === 'error' ? 'text-red-500' :
                                             alert.type === 'warning' ? 'text-orange-500' :
                                                 alert.type === 'success' ? 'text-green-500' :

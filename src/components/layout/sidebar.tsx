@@ -6,10 +6,11 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
     { href: "/", icon: "dashboard", label: "Dashboard", active: true },
-    { href: "/ai", icon: "smart_toy", label: "AI Assistant", highlight: true },
-    { href: "/files", icon: "folder_open", label: "Files & Docs", highlight: true },
+    { href: "/ai", icon: "smart_toy", label: "AI Assistant" },
+    { href: "/files", icon: "folder_open", label: "Files & Docs" },
     { href: "/bank-accounts", icon: "account_balance", label: "Bank Accounts", badge: "20" },
     { href: "/reports", icon: "description", label: "P&L Reports" },
+    { href: "/settings", icon: "settings", label: "Settings" },
 ];
 
 const operationsItems = [

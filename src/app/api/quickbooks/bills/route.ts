@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createBill, getBills, isAuthenticated } from '@/lib/quickbooks';
+import { moveFileToFolder } from '@/lib/google-drive';
 
 export async function GET() {
     if (!(await isAuthenticated())) {
@@ -54,6 +55,30 @@ export async function POST(request: NextRequest) {
         });
 
         console.log('[quickbooks/bills] Bill created', bill?.Id);
+
+        // Move file from "Unprocessed Files" to organized folder in Google Drive
+        if (data.driveId) {
+            try {
+                // Sanitize vendor name for folder path
+                const vendorFolder = (data.vendorName || 'Unknown')
+                    .replace(/[/\\?%*:|"<>]/g, '-')
+                    .trim();
+
+                // Determine category folder (default to "Invoices" if not provided)
+                const categoryFolder = data.category || 'Invoices';
+
+                // Build folder path: All Files/Invoices/{Category}/{Vendor}
+                const folderPath = `All Files/Invoices/${categoryFolder}/${vendorFolder}`;
+
+                console.log(`📁 Moving file ${data.driveId} to ${folderPath}`);
+                await moveFileToFolder(data.driveId, folderPath);
+                console.log(`✅ File moved to ${folderPath}`);
+            } catch (moveError) {
+                // Log but don't fail the request if move fails
+                console.error('⚠️ Failed to move file to folder:', moveError);
+            }
+        }
+
         return NextResponse.json({
             success: true,
             bill,

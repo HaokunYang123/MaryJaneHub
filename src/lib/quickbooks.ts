@@ -384,6 +384,47 @@ export async function getBills() {
     return result.QueryResponse.Bill || [];
 }
 
+// Check if a bill exists in QuickBooks by vendor name and amount
+export async function checkBillExists(vendorName: string, amount: number): Promise<{
+    exists: boolean;
+    billId?: string;
+    billNumber?: string;
+    vendorName?: string;
+    totalAmount?: number;
+}> {
+    try {
+        // First find the vendor
+        const vendor = await findVendor(vendorName);
+        if (!vendor) {
+            return { exists: false };
+        }
+
+        // Query bills for this vendor
+        const query = `SELECT * FROM Bill WHERE VendorRef = '${vendor.Id}' MAXRESULTS 50`;
+        const result = await makeRequest(`/query?query=${encodeURIComponent(query)}`);
+        const bills = result.QueryResponse.Bill || [];
+
+        // Check if any bill matches the amount (within $1 tolerance)
+        for (const bill of bills) {
+            const billTotal = bill.TotalAmt || 0;
+            if (Math.abs(billTotal - amount) < 1) {
+                return {
+                    exists: true,
+                    billId: bill.Id,
+                    billNumber: bill.DocNumber,
+                    vendorName: vendor.DisplayName,
+                    totalAmount: billTotal
+                };
+            }
+        }
+
+        return { exists: false };
+    } catch (error) {
+        console.error('Error checking bill existence:', error);
+        return { exists: false };
+    }
+}
+
 // Profit & Loss Report
 export async function getProfitAndLoss(startDate: string, endDate: string) {
     const result = await makeRequest(

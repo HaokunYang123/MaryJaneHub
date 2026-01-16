@@ -1,8 +1,6 @@
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Footer } from "@/components/layout/footer";
-import { AiSidebar } from "@/components/layout/ai-sidebar";
-import { FloatingAiButton } from "@/components/layout/floating-ai-button";
 import { CashPositionCard } from "@/components/dashboard/cash-position-card";
 import { AlertsCard } from "@/components/dashboard/alerts-card";
 import { AccountsReceivableCard } from "@/components/dashboard/accounts-receivable-card";
@@ -43,12 +41,9 @@ export default function Home() {
             <InventoryCard />
           </div>
         </main>
-
-        <AiSidebar />
       </div>
 
       <Footer />
-      <FloatingAiButton />
     </div>
   );
 }

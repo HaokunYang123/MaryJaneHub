@@ -13,8 +13,8 @@ export async function POST(req: NextRequest) {
 
     console.log(`📥 Receiving file: ${file.name} (${file.type})`);
 
-    // 1. Upload to Google Drive
-    const driveId = await uploadFileToDrive(file, "Mary - Inbox");
+    // 1. Upload to Google Drive "Unprocessed Files" folder
+    const driveId = await uploadFileToDrive(file, "Unprocessed Files");
 
     if (!driveId) {
       throw new Error("Drive upload failed");
@@ -25,7 +25,8 @@ export async function POST(req: NextRequest) {
 
     // 3. Trigger AI Analysis with Gemini Vision
     // Sends the raw file directly to Gemini - works on scanned PDFs!
-    const result = await analyzeUploadedFile(driveId, buffer, file.type, 'web');
+    // Pass original file name for duplicate detection
+    const result = await analyzeUploadedFile(driveId, buffer, file.type, 'web', file.name);
 
     return NextResponse.json(result);
 

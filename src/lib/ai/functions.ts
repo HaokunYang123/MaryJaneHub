@@ -98,8 +98,8 @@ export const AI_FUNCTIONS: AIFunction[] = [
       properties: {
         period: {
           type: 'string',
-          enum: ['this_month', 'last_month', 'this_quarter', 'last_quarter', 'this_year', 'ytd', 'custom'],
-          description: 'Time period for the report'
+          enum: ['this_month', 'last_month', 'this_quarter', 'last_quarter', 'this_year', 'last_year', 'ytd', 'all_time', 'custom'],
+          description: 'Time period for the report. Use all_time for complete history, this_year for current year.'
         },
         business_filter: {
           type: 'string',
@@ -132,8 +132,8 @@ export const AI_FUNCTIONS: AIFunction[] = [
         },
         period: {
           type: 'string',
-          enum: ['this_month', 'last_month', 'this_quarter', 'this_year'],
-          description: 'Time period'
+          enum: ['this_month', 'last_month', 'this_quarter', 'last_quarter', 'this_year', 'last_year', 'all_time'],
+          description: 'Time period. Use all_time for complete history.'
         }
       },
       required: ['group_by', 'period']
@@ -214,6 +214,50 @@ export const AI_FUNCTIONS: AIFunction[] = [
         due_date: {
           type: 'string',
           description: 'Payment due date (YYYY-MM-DD)'
+        }
+      },
+      required: ['customer_name', 'amount', 'description']
+    }
+  },
+
+  {
+    name: 'generate_professional_invoice',
+    description: 'Generate a professional-looking PDF invoice for billing a customer. Use this when Mary says she wants to create/make an invoice for a property, customer, or service.',
+    parameters: {
+      type: 'object',
+      properties: {
+        customer_name: {
+          type: 'string',
+          description: 'Name of the customer or tenant being invoiced'
+        },
+        amount: {
+          type: 'number',
+          description: 'Total invoice amount in dollars'
+        },
+        description: {
+          type: 'string',
+          description: 'Description of the service or charge (e.g., "Lawn cutting service", "HVAC repair")'
+        },
+        property: {
+          type: 'string',
+          description: 'Property name or location this invoice is related to (e.g., "Arizona property", "Riverside")'
+        },
+        category: {
+          type: 'string',
+          enum: ['Properties', 'Dispensary', 'Payroll', 'Banking', 'Legal', 'Taxes', 'Other'],
+          description: 'Category for filing the invoice'
+        },
+        customer_address: {
+          type: 'string',
+          description: 'Optional: Customer billing address'
+        },
+        notes: {
+          type: 'string',
+          description: 'Optional: Additional notes to include on the invoice'
+        },
+        due_days: {
+          type: 'number',
+          description: 'Number of days until payment is due (default 30)'
         }
       },
       required: ['customer_name', 'amount', 'description']
@@ -349,6 +393,182 @@ export const AI_FUNCTIONS: AIFunction[] = [
         }
       }
     }
+  },
+
+  // ============ JARVIS DAILY BRIEFING ============
+  {
+    name: 'get_daily_briefing',
+    description: 'Get a daily briefing for Mary including weather, market updates, alerts, and business status. Use this when Mary greets you (hello, hi, good morning, etc.) to provide a Jarvis-style informative greeting.',
+    parameters: {
+      type: 'object',
+      properties: {
+        include_weather: {
+          type: 'boolean',
+          description: 'Include weather info (default true)'
+        },
+        include_markets: {
+          type: 'boolean',
+          description: 'Include market updates (default true)'
+        },
+        include_alerts: {
+          type: 'boolean',
+          description: 'Include business alerts (default true)'
+        }
+      }
+    }
+  },
+
+  {
+    name: 'get_action_items',
+    description: 'Get a prioritized list of action items Mary should address today. Use this when Mary asks "what should I do today", "what needs my attention", "what are my priorities", or similar questions about tasks and finances.',
+    parameters: {
+      type: 'object',
+      properties: {
+        focus_area: {
+          type: 'string',
+          enum: ['all', 'bills', 'documents', 'properties', 'dispensaries'],
+          description: 'Specific area to focus on (default: all)'
+        },
+        priority_filter: {
+          type: 'string',
+          enum: ['all', 'high', 'medium'],
+          description: 'Filter by priority level (default: all)'
+        }
+      }
+    }
+  },
+
+  // ============ MEMORY & LEARNING - JARVIS FEATURES ============
+  {
+    name: 'remember_fact',
+    description: 'Remember something important about Mary - her preferences, important dates, facts, people, or anything she wants Jane to remember for future conversations. Use this proactively when Mary mentions personal info.',
+    parameters: {
+      type: 'object',
+      properties: {
+        fact: {
+          type: 'string',
+          description: 'The fact or information to remember (e.g., "Prefers morning meetings", "Birthday is June 15", "Allergic to shellfish")'
+        },
+        category: {
+          type: 'string',
+          enum: ['preference', 'personal', 'business', 'contact', 'date', 'financial', 'health', 'other'],
+          description: 'Category of the information'
+        }
+      },
+      required: ['fact', 'category']
+    }
+  },
+
+  {
+    name: 'add_contact',
+    description: 'Add or update an important person in Mary\'s network - family, business partners, employees, contractors, etc.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Name of the person'
+        },
+        relationship: {
+          type: 'string',
+          description: 'Their relationship to Mary (e.g., "property manager", "daughter", "accountant", "tenant")'
+        },
+        notes: {
+          type: 'string',
+          description: 'Additional notes about this person'
+        }
+      },
+      required: ['name', 'relationship']
+    }
+  },
+
+  {
+    name: 'add_reminder',
+    description: 'Add a reminder for Mary - something she needs to do, remember, or follow up on',
+    parameters: {
+      type: 'object',
+      properties: {
+        content: {
+          type: 'string',
+          description: 'What to remind Mary about'
+        },
+        due_date: {
+          type: 'string',
+          description: 'When the reminder is due (YYYY-MM-DD). Optional.'
+        },
+        priority: {
+          type: 'string',
+          enum: ['low', 'medium', 'high'],
+          description: 'Priority level of the reminder'
+        }
+      },
+      required: ['content']
+    }
+  },
+
+  {
+    name: 'add_event',
+    description: 'Add an event or appointment to Mary\'s schedule',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Title of the event'
+        },
+        date: {
+          type: 'string',
+          description: 'Date of the event (YYYY-MM-DD)'
+        },
+        time: {
+          type: 'string',
+          description: 'Time of the event (HH:MM). Optional.'
+        },
+        notes: {
+          type: 'string',
+          description: 'Additional notes about the event'
+        }
+      },
+      required: ['title', 'date']
+    }
+  },
+
+  {
+    name: 'get_reminders',
+    description: 'Get Mary\'s current reminders and upcoming events',
+    parameters: {
+      type: 'object',
+      properties: {
+        include_completed: {
+          type: 'boolean',
+          description: 'Whether to include completed reminders'
+        },
+        days_ahead: {
+          type: 'number',
+          description: 'How many days ahead to look for events (default 7)'
+        }
+      }
+    }
+  },
+
+  {
+    name: 'update_preference',
+    description: 'Update Mary\'s preferences for how Jane should behave or communicate',
+    parameters: {
+      type: 'object',
+      properties: {
+        preference_type: {
+          type: 'string',
+          enum: ['communication_style', 'preferred_name', 'working_hours', 'favorite_topic', 'disliked_topic'],
+          description: 'Type of preference to update'
+        },
+        value: {
+          type: 'string',
+          description: 'The new value for this preference'
+        }
+      },
+      required: ['preference_type', 'value']
+    }
   }
 ];
 
@@ -357,6 +577,7 @@ export const WRITE_OPERATIONS = [
   'record_expense',
   'create_bill',
   'create_invoice',
+  'generate_professional_invoice',
   'initiate_payment',
   'transfer_funds'
 ];

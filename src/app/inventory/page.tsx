@@ -1,8 +1,10 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Footer } from "@/components/layout/footer";
+import { AnimatedNumber, AnimatedCurrency, AnimatedPercent } from "@/components/ui/animated-number";
 
 // Demo inventory data
 const inventory = [
@@ -17,16 +19,31 @@ const inventory = [
 ];
 
 export default function InventoryPage() {
+    const [isVisible, setIsVisible] = useState(false);
+    const pageRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) setIsVisible(true);
+            },
+            { threshold: 0.1 }
+        );
+        if (pageRef.current) observer.observe(pageRef.current);
+        return () => observer.disconnect();
+    }, []);
+
     const totalFlower = inventory.filter(i => i.type.includes('Flower')).reduce((sum, i) => sum + i.quantity, 0);
     const totalUnits = inventory.filter(i => i.unit === 'units').reduce((sum, i) => sum + i.quantity, 0);
     const totalValue = inventory.reduce((sum, i) => sum + i.value, 0);
+    const capacityPercent = 72;
 
     return (
         <div className="bg-white text-slate-900 min-h-screen flex flex-col">
             <Header />
             <div className="flex flex-1 overflow-hidden">
                 <Sidebar />
-                <main className="flex-1 overflow-y-auto bg-slate-50 p-6">
+                <main ref={pageRef} className="flex-1 overflow-y-auto bg-slate-50 p-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                         <div>
                             <h2 className="text-3xl font-black text-slate-900 tracking-tight">Cannabis Inventory</h2>
@@ -44,28 +61,39 @@ export default function InventoryPage() {
 
                     {/* Inventory Summary */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                        <div className={`bg-white rounded-xl border border-slate-200 p-4 shadow-sm transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                             <div className="flex items-center gap-2 mb-1">
                                 <span className="material-symbols-outlined text-[#1B5E20]">eco</span>
                                 <p className="text-xs text-slate-400 font-bold uppercase">Total Flower</p>
                             </div>
-                            <p className="text-2xl font-black text-slate-800">{totalFlower.toLocaleString()}g</p>
+                            <p className="text-2xl font-black text-slate-800 tabular-nums">
+                                {isVisible ? <AnimatedNumber value={totalFlower} duration={1400} /> : '0'}g
+                            </p>
                         </div>
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                        <div className={`bg-white rounded-xl border border-slate-200 p-4 shadow-sm transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '100ms' }}>
                             <p className="text-xs text-slate-400 font-bold uppercase">Retail Units</p>
-                            <p className="text-2xl font-black text-slate-800">{totalUnits.toLocaleString()}</p>
+                            <p className="text-2xl font-black text-slate-800 tabular-nums">
+                                {isVisible ? <AnimatedNumber value={totalUnits} duration={1400} delay={100} /> : '0'}
+                            </p>
                         </div>
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                        <div className={`bg-white rounded-xl border border-slate-200 p-4 shadow-sm transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '200ms' }}>
                             <p className="text-xs text-slate-400 font-bold uppercase">Total Value</p>
-                            <p className="text-2xl font-black text-[#FFB300]">${totalValue.toLocaleString()}</p>
+                            <p className="text-2xl font-black text-[#FFB300] tabular-nums">
+                                {isVisible ? <AnimatedCurrency value={totalValue} duration={1400} delay={200} /> : '$0.00'}
+                            </p>
                         </div>
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                        <div className={`bg-white rounded-xl border border-slate-200 p-4 shadow-sm transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '300ms' }}>
                             <p className="text-xs text-slate-400 font-bold uppercase">Capacity Used</p>
                             <div className="flex items-center gap-2 mt-1">
                                 <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                    <div className="h-full bg-[#FFB300]" style={{ width: '72%' }}></div>
+                                    <div
+                                        className="h-full bg-[#FFB300] transition-all duration-1000 ease-out"
+                                        style={{ width: isVisible ? `${capacityPercent}%` : '0%', transitionDelay: '500ms' }}
+                                    />
                                 </div>
-                                <span className="text-sm font-bold">72%</span>
+                                <span className="text-sm font-bold tabular-nums">
+                                    {isVisible ? <AnimatedPercent value={capacityPercent} duration={1200} delay={300} decimals={0} /> : '0%'}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -92,12 +120,20 @@ export default function InventoryPage() {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {inventory.map((item, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-50">
+                                    <tr
+                                        key={idx}
+                                        className={`hover:bg-slate-50 transition-all duration-500 ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`}
+                                        style={{ transitionDelay: `${400 + idx * 50}ms` }}
+                                    >
                                         <td className="px-6 py-4 font-mono text-xs text-slate-500">{item.sku}</td>
                                         <td className="px-6 py-4 font-medium">{item.strain}</td>
                                         <td className="px-6 py-4 text-slate-600">{item.type}</td>
-                                        <td className="px-6 py-4 text-center font-bold">{item.quantity} {item.unit}</td>
-                                        <td className="px-6 py-4 text-right font-bold">${item.value.toLocaleString()}</td>
+                                        <td className="px-6 py-4 text-center font-bold tabular-nums">
+                                            {isVisible ? <AnimatedNumber value={item.quantity} duration={1000} delay={400 + idx * 50} /> : '0'} {item.unit}
+                                        </td>
+                                        <td className="px-6 py-4 text-right font-bold tabular-nums">
+                                            {isVisible ? <AnimatedCurrency value={item.value} duration={1000} delay={400 + idx * 50} /> : '$0.00'}
+                                        </td>
                                         <td className="px-6 py-4 text-center">
                                             <span className={`px-2 py-0.5 rounded text-xs font-bold ${item.location === 'Phoenix' ? 'bg-[#1B5E20]/10 text-[#1B5E20]' :
                                                     item.location === 'Tucson' ? 'bg-[#FFB300]/10 text-[#FFB300]' :

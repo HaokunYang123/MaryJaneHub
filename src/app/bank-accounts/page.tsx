@@ -1,8 +1,10 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Footer } from "@/components/layout/footer";
+import { AnimatedCurrency, AnimatedPercent } from "@/components/ui/animated-number";
 
 // Demo bank accounts data
 const accounts = [
@@ -15,6 +17,20 @@ const accounts = [
 ];
 
 export default function BankAccountsPage() {
+    const [isVisible, setIsVisible] = useState(false);
+    const pageRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) setIsVisible(true);
+            },
+            { threshold: 0.1 }
+        );
+        if (pageRef.current) observer.observe(pageRef.current);
+        return () => observer.disconnect();
+    }, []);
+
     const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
     const checkingTotal = accounts.filter(a => a.type === 'Checking').reduce((sum, a) => sum + a.balance, 0);
     const savingsTotal = accounts.filter(a => a.type === 'Savings').reduce((sum, a) => sum + a.balance, 0);
@@ -24,7 +40,7 @@ export default function BankAccountsPage() {
             <Header />
             <div className="flex flex-1 overflow-hidden">
                 <Sidebar />
-                <main className="flex-1 overflow-y-auto bg-slate-50 p-6">
+                <main ref={pageRef} className="flex-1 overflow-y-auto bg-slate-50 p-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                         <div>
                             <h2 className="text-3xl font-black text-slate-900 tracking-tight">Bank Accounts</h2>
@@ -42,19 +58,27 @@ export default function BankAccountsPage() {
 
                     {/* Balance Summary */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                        <div className="bg-[#1B5E20] text-white rounded-xl p-6 shadow-lg">
+                        <div className={`bg-[#1B5E20] text-white rounded-xl p-6 shadow-lg transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                             <p className="text-xs text-white/60 font-bold uppercase">Total Balance</p>
-                            <p className="text-4xl font-black mt-1">${totalBalance.toLocaleString()}</p>
-                            <p className="text-xs text-green-300 mt-2">+12.4% from last month</p>
+                            <p className="text-4xl font-black mt-1 tabular-nums">
+                                {isVisible ? <AnimatedCurrency value={totalBalance} duration={1500} className="text-white" /> : '$0.00'}
+                            </p>
+                            <p className="text-xs text-green-300 mt-2">
+                                +{isVisible ? <AnimatedPercent value={12.4} duration={1200} delay={300} showSign={false} className="text-green-300" /> : '0%'} from last month
+                            </p>
                         </div>
-                        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                        <div className={`bg-white rounded-xl border border-slate-200 p-6 shadow-sm transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '100ms' }}>
                             <p className="text-xs text-slate-400 font-bold uppercase">Checking Accounts</p>
-                            <p className="text-3xl font-black text-slate-800 mt-1">${checkingTotal.toLocaleString()}</p>
+                            <p className="text-3xl font-black text-slate-800 mt-1 tabular-nums">
+                                {isVisible ? <AnimatedCurrency value={checkingTotal} duration={1400} delay={100} /> : '$0.00'}
+                            </p>
                             <p className="text-xs text-slate-400 mt-2">{accounts.filter(a => a.type === 'Checking').length} accounts</p>
                         </div>
-                        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                        <div className={`bg-white rounded-xl border border-slate-200 p-6 shadow-sm transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '200ms' }}>
                             <p className="text-xs text-slate-400 font-bold uppercase">Savings / Reserves</p>
-                            <p className="text-3xl font-black text-slate-800 mt-1">${savingsTotal.toLocaleString()}</p>
+                            <p className="text-3xl font-black text-slate-800 mt-1 tabular-nums">
+                                {isVisible ? <AnimatedCurrency value={savingsTotal} duration={1400} delay={200} /> : '$0.00'}
+                            </p>
                             <p className="text-xs text-slate-400 mt-2">{accounts.filter(a => a.type === 'Savings').length} accounts</p>
                         </div>
                     </div>
@@ -63,7 +87,9 @@ export default function BankAccountsPage() {
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div className="p-4 border-b border-slate-200 flex justify-between items-center">
                             <h3 className="font-bold">All Accounts</h3>
-                            <span className="text-xs bg-slate-200 px-2 py-1 rounded font-bold">{accounts.length} LINKED</span>
+                            <span className={`text-xs bg-slate-200 px-2 py-1 rounded font-bold transition-all duration-500 ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
+                                {accounts.length} LINKED
+                            </span>
                         </div>
                         <table className="w-full text-sm">
                             <thead>
@@ -77,7 +103,11 @@ export default function BankAccountsPage() {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {accounts.map((acc, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-50">
+                                    <tr
+                                        key={idx}
+                                        className={`hover:bg-slate-50 transition-all duration-500 ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`}
+                                        style={{ transitionDelay: `${300 + idx * 80}ms` }}
+                                    >
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="size-8 rounded-lg bg-slate-100 flex items-center justify-center">
@@ -97,7 +127,9 @@ export default function BankAccountsPage() {
                                                 {acc.type}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-right font-bold text-lg">${acc.balance.toLocaleString()}</td>
+                                        <td className="px-6 py-4 text-right font-bold text-lg tabular-nums">
+                                            {isVisible ? <AnimatedCurrency value={acc.balance} duration={1200} delay={300 + idx * 80} /> : '$0.00'}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

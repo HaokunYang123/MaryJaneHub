@@ -9,7 +9,7 @@ import { HumanMessage, AIMessage } from '@langchain/core/messages';
 
 export const runtime = 'nodejs';
 
-// 1. Initialize Gemini instead of OpenAI
+// 1. Initialize Gemini 2.5 Flash
 const model = new ChatGoogleGenerativeAI({
   model: 'gemini-2.5-flash',
   temperature: 0,

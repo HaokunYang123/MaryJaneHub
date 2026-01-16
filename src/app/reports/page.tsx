@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Footer } from "@/components/layout/footer";
+import { AnimatedCurrency, AnimatedPercent } from "@/components/ui/animated-number";
 
 interface PnLRow {
     name: string;
@@ -38,6 +39,19 @@ export default function ReportsPage() {
     const [loading, setLoading] = useState(false);
     const [consolidatedData, setConsolidatedData] = useState<ConsolidatedPnL | null>(null);
     const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+    const [isVisible, setIsVisible] = useState(false);
+    const pageRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) setIsVisible(true);
+            },
+            { threshold: 0.1 }
+        );
+        if (pageRef.current) observer.observe(pageRef.current);
+        return () => observer.disconnect();
+    }, []);
 
     const fetchReport = async () => {
         setLoading(true);
@@ -132,7 +146,7 @@ export default function ReportsPage() {
             <Header />
             <div className="flex flex-1 overflow-hidden">
                 <Sidebar />
-                <main className="flex-1 overflow-y-auto bg-slate-50 p-6">
+                <main ref={pageRef} className="flex-1 overflow-y-auto bg-slate-50 p-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                         <div>
                             <h2 className="text-3xl font-black text-slate-900 tracking-tight">Profit & Loss Statement</h2>
@@ -190,23 +204,32 @@ export default function ReportsPage() {
                             <span className="text-xs text-slate-400">{startDate} to {endDate}</span>
                         </div>
                         <div className="flex h-10 w-full overflow-hidden rounded-full border border-slate-200 bg-slate-50">
-                            {chartSegments.map((segment) => (
+                            {chartSegments.map((segment, idx) => (
                                 <div
                                     key={segment.label}
-                                    className={`${segment.color} h-full`}
-                                    style={{ width: segment.width }}
+                                    className={`${segment.color} h-full transition-all duration-1000 ease-out`}
+                                    style={{
+                                        width: isVisible ? segment.width : '0%',
+                                        transitionDelay: `${idx * 150}ms`
+                                    }}
                                     title={`${segment.label}: $${segment.revenue.toLocaleString()}`}
                                 />
                             ))}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-                            {chartSegments.map((segment) => (
-                                <div key={segment.label} className="flex items-center justify-between text-xs text-slate-600">
+                            {chartSegments.map((segment, idx) => (
+                                <div
+                                    key={segment.label}
+                                    className={`flex items-center justify-between text-xs text-slate-600 transition-all duration-500 ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`}
+                                    style={{ transitionDelay: `${200 + idx * 80}ms` }}
+                                >
                                     <div className="flex items-center gap-2">
                                         <span className={`size-2 rounded-full ${segment.color}`} />
                                         <span className="font-semibold">{segment.label}</span>
                                     </div>
-                                    <span>${segment.revenue.toLocaleString()}</span>
+                                    <span className="tabular-nums">
+                                        {isVisible ? <AnimatedCurrency value={segment.revenue} duration={1200} delay={200 + idx * 80} /> : '$0.00'}
+                                    </span>
                                 </div>
                             ))}
                         </div>
@@ -244,20 +267,32 @@ export default function ReportsPage() {
 
                     {/* Summary Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-                        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                        <div className={`bg-white rounded-xl border border-slate-200 p-6 shadow-sm transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                             <p className="text-xs text-slate-400 font-bold uppercase">Total Revenue</p>
-                            <p className="text-3xl font-black text-slate-800 mt-1">${displayConsolidated.totalRevenue.toLocaleString()}</p>
-                            <p className="text-xs text-green-600 mt-2">+18.2% vs last period</p>
+                            <p className="text-3xl font-black text-slate-800 mt-1 tabular-nums">
+                                {isVisible ? <AnimatedCurrency value={displayConsolidated.totalRevenue} duration={1500} /> : '$0.00'}
+                            </p>
+                            <p className="text-xs text-green-600 mt-2">
+                                +{isVisible ? <AnimatedPercent value={18.2} duration={1200} delay={200} showSign={false} className="text-green-600" /> : '0%'} vs last period
+                            </p>
                         </div>
-                        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                        <div className={`bg-white rounded-xl border border-slate-200 p-6 shadow-sm transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '100ms' }}>
                             <p className="text-xs text-slate-400 font-bold uppercase">Total Expenses</p>
-                            <p className="text-3xl font-black text-slate-800 mt-1">${displayConsolidated.totalExpenses.toLocaleString()}</p>
-                            <p className="text-xs text-red-600 mt-2">+12.4% vs last period</p>
+                            <p className="text-3xl font-black text-slate-800 mt-1 tabular-nums">
+                                {isVisible ? <AnimatedCurrency value={displayConsolidated.totalExpenses} duration={1500} delay={100} /> : '$0.00'}
+                            </p>
+                            <p className="text-xs text-red-600 mt-2">
+                                +{isVisible ? <AnimatedPercent value={12.4} duration={1200} delay={300} showSign={false} className="text-red-600" /> : '0%'} vs last period
+                            </p>
                         </div>
-                        <div className="bg-[#1B5E20] rounded-xl p-6 shadow-sm text-white">
+                        <div className={`bg-[#1B5E20] rounded-xl p-6 shadow-sm text-white transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '200ms' }}>
                             <p className="text-xs text-white/60 font-bold uppercase">Net Profit</p>
-                            <p className="text-3xl font-black mt-1">${netProfit.toLocaleString()}</p>
-                            <p className="text-xs text-green-300 mt-2">+23.1% vs last period</p>
+                            <p className="text-3xl font-black mt-1 tabular-nums">
+                                {isVisible ? <AnimatedCurrency value={netProfit} duration={1500} delay={200} className="text-white" /> : '$0.00'}
+                            </p>
+                            <p className="text-xs text-green-300 mt-2">
+                                +{isVisible ? <AnimatedPercent value={23.1} duration={1200} delay={400} showSign={false} className="text-green-300" /> : '0%'} vs last period
+                            </p>
                         </div>
                     </div>
                 </main>

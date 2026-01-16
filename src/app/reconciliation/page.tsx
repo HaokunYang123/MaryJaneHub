@@ -1,8 +1,10 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Footer } from "@/components/layout/footer";
+import { AnimatedNumber, AnimatedCurrency } from "@/components/ui/animated-number";
 
 // Demo reconciliation data
 const reconciliations = [
@@ -15,6 +17,20 @@ const reconciliations = [
 ];
 
 export default function ReconciliationPage() {
+    const [isVisible, setIsVisible] = useState(false);
+    const pageRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) setIsVisible(true);
+            },
+            { threshold: 0.1 }
+        );
+        if (pageRef.current) observer.observe(pageRef.current);
+        return () => observer.disconnect();
+    }, []);
+
     const matched = reconciliations.filter(r => r.status === 'matched').length;
     const issues = reconciliations.filter(r => r.status !== 'matched').length;
 
@@ -23,7 +39,7 @@ export default function ReconciliationPage() {
             <Header />
             <div className="flex flex-1 overflow-hidden">
                 <Sidebar />
-                <main className="flex-1 overflow-y-auto bg-slate-50 p-6">
+                <main ref={pageRef} className="flex-1 overflow-y-auto bg-slate-50 p-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                         <div>
                             <h2 className="text-3xl font-black text-slate-900 tracking-tight">Reconciliation</h2>
@@ -36,21 +52,25 @@ export default function ReconciliationPage() {
 
                     {/* Summary Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                        <div className={`bg-green-50 border border-green-200 rounded-xl p-4 transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                             <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-green-600">check_circle</span>
+                                <span className={`material-symbols-outlined text-green-600 transition-all duration-500 ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-0'}`}>check_circle</span>
                                 <p className="text-xs text-green-600 font-bold uppercase">Matched</p>
                             </div>
-                            <p className="text-3xl font-black text-green-700 mt-1">{matched} accounts</p>
+                            <p className="text-3xl font-black text-green-700 mt-1 tabular-nums">
+                                {isVisible ? <><AnimatedNumber value={matched} duration={1200} /> accounts</> : '0 accounts'}
+                            </p>
                         </div>
-                        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                        <div className={`bg-red-50 border border-red-200 rounded-xl p-4 transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '100ms' }}>
                             <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-red-600">error</span>
+                                <span className={`material-symbols-outlined text-red-600 transition-all duration-500 ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-0'}`} style={{ transitionDelay: '100ms' }}>error</span>
                                 <p className="text-xs text-red-600 font-bold uppercase">Issues Found</p>
                             </div>
-                            <p className="text-3xl font-black text-red-700 mt-1">{issues} accounts</p>
+                            <p className="text-3xl font-black text-red-700 mt-1 tabular-nums">
+                                {isVisible ? <><AnimatedNumber value={issues} duration={1200} delay={100} /> accounts</> : '0 accounts'}
+                            </p>
                         </div>
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                        <div className={`bg-white rounded-xl border border-slate-200 p-4 shadow-sm transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '200ms' }}>
                             <p className="text-xs text-slate-400 font-bold uppercase">Last Reconciled</p>
                             <p className="text-2xl font-black text-slate-800 mt-1">March 4, 2024</p>
                             <p className="text-xs text-slate-400">2 hours ago</p>
@@ -76,12 +96,16 @@ export default function ReconciliationPage() {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {reconciliations.map((rec, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-50">
+                                    <tr key={idx} className={`hover:bg-slate-50 transition-all duration-500 ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`} style={{ transitionDelay: `${300 + idx * 80}ms` }}>
                                         <td className="px-6 py-4 font-medium">{rec.account}</td>
                                         <td className="px-6 py-4 text-slate-600">{rec.entity}</td>
-                                        <td className="px-6 py-4 text-right">${rec.bookBalance.toLocaleString()}</td>
-                                        <td className="px-6 py-4 text-right">${rec.bankBalance.toLocaleString()}</td>
-                                        <td className={`px-6 py-4 text-right font-bold ${rec.difference !== 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                        <td className="px-6 py-4 text-right tabular-nums">
+                                            {isVisible ? <AnimatedCurrency value={rec.bookBalance} duration={1000} delay={300 + idx * 80} /> : '$0.00'}
+                                        </td>
+                                        <td className="px-6 py-4 text-right tabular-nums">
+                                            {isVisible ? <AnimatedCurrency value={rec.bankBalance} duration={1000} delay={300 + idx * 80} /> : '$0.00'}
+                                        </td>
+                                        <td className={`px-6 py-4 text-right font-bold tabular-nums ${rec.difference !== 0 ? 'text-red-600' : 'text-green-600'}`}>
                                             {rec.difference !== 0 ? `-$${Math.abs(rec.difference).toLocaleString()}` : '$0'}
                                         </td>
                                         <td className="px-6 py-4 text-center">

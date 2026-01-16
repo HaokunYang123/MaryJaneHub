@@ -30,6 +30,10 @@ const auth = new google.auth.GoogleAuth({
 
 const drive = google.drive({ version: 'v3', auth });
 
+// --- Folder Cache to prevent duplicate creation during concurrent uploads ---
+const folderCache = new Map<string, string>(); // key: "parentId/folderName" -> folderId
+const pendingFolderCreations = new Map<string, Promise<string>>(); // Prevent race conditions
+
 // --- Helper: Find or Create Path (Recursive) ---
 async function findOrCreatePath(path: string): Promise<string> {
   // Split path into segments (e.g. ["All Files", "Property Management", "Tennessee"])
@@ -45,45 +49,105 @@ async function findOrCreatePath(path: string): Promise<string> {
 }
 
 async function findOrCreateSingleFolder(name: string, parentId?: string): Promise<string> {
+  const cacheKey = `${parentId || 'root'}/${name}`;
+
+  // Check cache first
+  if (folderCache.has(cacheKey)) {
+    return folderCache.get(cacheKey)!;
+  }
+
+  // Check if there's already a pending creation for this folder
+  if (pendingFolderCreations.has(cacheKey)) {
+    return pendingFolderCreations.get(cacheKey)!;
+  }
+
+  // Create a promise for this folder creation and store it
+  const creationPromise = (async () => {
+    try {
+      // 1. Search for existing folder
+      let query = `mimeType='application/vnd.google-apps.folder' and name='${name}' and trashed=false`;
+      if (parentId) {
+        query += ` and '${parentId}' in parents`;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const listRequest: any = {
+        q: query,
+        fields: 'files(id)',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      };
+
+      const list = await drive.files.list(listRequest);
+
+      if (list.data.files && list.data.files.length > 0) {
+        const folderId = list.data.files[0].id!;
+        folderCache.set(cacheKey, folderId);
+        return folderId;
+      }
+
+      // 2. Create if not found
+      console.log(`📁 Creating folder '${name}' inside parent '${parentId || 'Root'}'...`);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const createRequest: any = {
+        requestBody: {
+          name,
+          mimeType: 'application/vnd.google-apps.folder',
+          parents: parentId ? [parentId] : undefined
+        },
+        fields: 'id',
+        supportsAllDrives: true,
+      };
+
+      const res = await drive.files.create(createRequest);
+      const folderId = res.data.id!;
+      folderCache.set(cacheKey, folderId);
+      return folderId;
+    } catch (error) {
+      console.error(`❌ Folder Error (${name}):`, error);
+      throw error;
+    } finally {
+      // Clean up pending creation
+      pendingFolderCreations.delete(cacheKey);
+    }
+  })();
+
+  pendingFolderCreations.set(cacheKey, creationPromise);
+  return creationPromise;
+}
+
+// --- Upload Buffer directly to Drive (for generated PDFs) ---
+export async function uploadBufferToDrive(
+  buffer: Buffer,
+  fileName: string,
+  mimeType: string,
+  folderPath: string = "Unprocessed Files"
+): Promise<string | null> {
   try {
-    // 1. Search for existing folder
-    let query = `mimeType='application/vnd.google-apps.folder' and name='${name}' and trashed=false`;
-    if (parentId) {
-      query += ` and '${parentId}' in parents`;
-    }
+    const folderId = await findOrCreatePath(folderPath);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const listRequest: any = {
-      q: query,
-      fields: 'files(id)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-    };
+    const stream = new Readable();
+    stream.push(buffer);
+    stream.push(null);
 
-    const list = await drive.files.list(listRequest);
-
-    if (list.data.files && list.data.files.length > 0) {
-      return list.data.files[0].id!;
-    }
-
-    // 2. Create if not found
-    console.log(`📁 Creating folder '${name}' inside parent '${parentId || 'Root'}'...`);
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const createRequest: any = {
+    const res = await drive.files.create({
       requestBody: {
-        name,
-        mimeType: 'application/vnd.google-apps.folder',
-        parents: parentId ? [parentId] : undefined
+        name: fileName,
+        parents: [folderId],
+      },
+      media: {
+        mimeType,
+        body: stream,
       },
       fields: 'id',
       supportsAllDrives: true,
-    };
+    });
 
-    const res = await drive.files.create(createRequest);
-    return res.data.id!;
+    console.log(`✅ Uploaded ${fileName} to '${folderPath}' (ID: ${res.data.id})`);
+    return res.data.id || null;
   } catch (error) {
-    console.error(`❌ Folder Error (${name}):`, error);
+    console.error("❌ Buffer Upload Error:", error);
     throw error;
   }
 }
@@ -162,4 +226,33 @@ export async function getFolderByStatus(status: 'pending' | 'processed' | 'rejec
     rejected: 'All Files/Rejected'
   };
   try { return await findOrCreatePath(map[status]); } catch { return null; }
+}
+
+/**
+ * Check if a file exists in Google Drive (and is NOT in trash)
+ * Returns true if file exists and is not trashed, false otherwise
+ */
+export async function checkFileExists(fileId: string): Promise<boolean> {
+  try {
+    const response = await drive.files.get({
+      fileId,
+      fields: 'id,trashed',
+      supportsAllDrives: true,
+    });
+
+    // File exists but is in trash - treat as deleted
+    if (response.data.trashed) {
+      return false;
+    }
+
+    return true;
+  } catch (error: unknown) {
+    const err = error as { code?: number };
+    if (err.code === 404) {
+      return false;
+    }
+    // For other errors, assume file might exist (fail open)
+    console.log(`checkFileExists error for ${fileId}:`, error);
+    return true;
+  }
 }

@@ -1,8 +1,10 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Footer } from "@/components/layout/footer";
+import { AnimatedCurrency } from "@/components/ui/animated-number";
 
 // Demo data for accounts receivable
 const invoices = [
@@ -15,15 +17,30 @@ const invoices = [
 ];
 
 export default function ReceivablePage() {
+    const [isVisible, setIsVisible] = useState(false);
+    const pageRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) setIsVisible(true);
+            },
+            { threshold: 0.1 }
+        );
+        if (pageRef.current) observer.observe(pageRef.current);
+        return () => observer.disconnect();
+    }, []);
+
     const totalDue = invoices.filter(i => i.status !== 'paid').reduce((sum, i) => sum + i.amount, 0);
     const overdue = invoices.filter(i => i.status === 'overdue').reduce((sum, i) => sum + i.amount, 0);
+    const collected = 9400;
 
     return (
         <div className="bg-white text-slate-900 min-h-screen flex flex-col">
             <Header />
             <div className="flex flex-1 overflow-hidden">
                 <Sidebar />
-                <main className="flex-1 overflow-y-auto bg-slate-50 p-6">
+                <main ref={pageRef} className="flex-1 overflow-y-auto bg-slate-50 p-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                         <div>
                             <h2 className="text-3xl font-black text-slate-900 tracking-tight">Accounts Receivable</h2>
@@ -36,17 +53,23 @@ export default function ReceivablePage() {
 
                     {/* Summary Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                        <div className={`bg-white rounded-xl border border-slate-200 p-4 shadow-sm transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                             <p className="text-xs text-slate-400 font-bold uppercase">Total Receivable</p>
-                            <p className="text-2xl font-black text-[#FFB300]">${totalDue.toLocaleString()}</p>
+                            <p className="text-2xl font-black text-[#FFB300] tabular-nums">
+                                {isVisible ? <AnimatedCurrency value={totalDue} duration={1400} /> : '$0.00'}
+                            </p>
                         </div>
-                        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                        <div className={`bg-red-50 border border-red-200 rounded-xl p-4 transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '100ms' }}>
                             <p className="text-xs text-red-600 font-bold uppercase">Overdue</p>
-                            <p className="text-2xl font-black text-red-700">${overdue.toLocaleString()}</p>
+                            <p className="text-2xl font-black text-red-700 tabular-nums">
+                                {isVisible ? <AnimatedCurrency value={overdue} duration={1400} delay={100} /> : '$0.00'}
+                            </p>
                         </div>
-                        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                        <div className={`bg-green-50 border border-green-200 rounded-xl p-4 transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`} style={{ transitionDelay: '200ms' }}>
                             <p className="text-xs text-green-600 font-bold uppercase">Collected This Month</p>
-                            <p className="text-2xl font-black text-green-700">$9,400</p>
+                            <p className="text-2xl font-black text-green-700 tabular-nums">
+                                {isVisible ? <AnimatedCurrency value={collected} duration={1400} delay={200} /> : '$0.00'}
+                            </p>
                         </div>
                     </div>
 
@@ -70,10 +93,16 @@ export default function ReceivablePage() {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {invoices.map((invoice, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-50">
+                                    <tr
+                                        key={idx}
+                                        className={`hover:bg-slate-50 transition-all duration-500 ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`}
+                                        style={{ transitionDelay: `${300 + idx * 60}ms` }}
+                                    >
                                         <td className="px-6 py-4 font-medium">{invoice.customer}</td>
                                         <td className="px-6 py-4 text-slate-600">{invoice.description}</td>
-                                        <td className="px-6 py-4 text-right font-bold">${invoice.amount.toLocaleString()}</td>
+                                        <td className="px-6 py-4 text-right font-bold tabular-nums">
+                                            {isVisible ? <AnimatedCurrency value={invoice.amount} duration={1000} delay={300 + idx * 60} /> : '$0.00'}
+                                        </td>
                                         <td className="px-6 py-4 text-center">
                                             {invoice.status === 'overdue' && (
                                                 <span className="px-2 py-0.5 bg-red-100 text-red-600 rounded-full font-bold">
