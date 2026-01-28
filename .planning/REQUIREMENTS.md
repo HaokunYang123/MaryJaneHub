@@ -75,6 +75,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **PNL-04**: Expense categorization using QuickBooks COA as source
 - [ ] **PNL-05**: COGS vs Operating Expense breakdown for cannabis entities
 - [ ] **PNL-06**: Revenue by entity breakdown in consolidated view
+- [ ] **PNL-07**: Inter-company transfer toggle — UI to mark transactions as transfers between entities
+- [ ] **PNL-08**: Inter-company transfers excluded from P&L calculations (not income/expense)
 
 ### Testing (Kill Zones)
 
@@ -179,16 +181,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PNL-04 | Phase 7 | Pending |
 | PNL-05 | Phase 7 | Pending |
 | PNL-06 | Phase 7 | Pending |
+| PNL-07 | Phase 7 | Pending |
+| PNL-08 | Phase 7 | Pending |
 | TEST-01 | Phase 8 | Pending |
 | TEST-02 | Phase 8 | Pending |
 | TEST-03 | Phase 8 | Pending |
 | TEST-04 | Phase 8 | Pending |
 
 **Coverage:**
-- v1 requirements: 44 total
-- Mapped to phases: 44
+- v1 requirements: 51 total
+- Mapped to phases: 51
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-01-28*
-*Last updated: 2026-01-28 after initial definition*
+*Last updated: 2026-01-28 after roadmap creation*
