@@ -1,0 +1,27 @@
+{
+  "name": "maryjane-hub-document-ai",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test:ocr": "npx tsx scripts/test-document-ai.ts",
+    "test:gemini": "npx tsx scripts/test-gemini-extraction.ts",
+    "test:gcs": "npx tsx scripts/test-gcs-upload.ts",
+    "test:pipeline": "npx tsx scripts/test-pipeline.ts",
+    "test:supabase": "npx tsx scripts/test-supabase.ts",
+    "test:drive": "npx tsx scripts/test-drive.ts",
+    "workflow": "npx tsx scripts/test-full-workflow.ts"
+  },
+  "dependencies": {
+    "@google-cloud/documentai": "^8.12.0",
+    "@google-cloud/storage": "^7.18.0",
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.93.2",
+    "dotenv": "^17.2.3",
+    "googleapis": "^170.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
