@@ -19,7 +19,8 @@
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.93.2",
     "dotenv": "^17.2.3",
-    "googleapis": "^170.1.0"
+    "googleapis": "^170.1.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

@@ -1,5 +1,6 @@
 import type { InvoiceExtraction } from "../gemini/types.js";
 import type { DocumentType } from "../gemini/document-types.js";
+import type { DocumentExtraction } from "../gemini/extract-document.js";
 
 /**
  * Status of document processing
@@ -24,7 +25,7 @@ export interface ProcessedDocument {
   classificationConfidence: number;
 
   // Extraction layer
-  extraction: InvoiceExtraction;
+  extraction: DocumentExtraction;
 
   // Storage layer
   gcsPath?: string; // GCS path if uploaded successfully
@@ -38,4 +39,4 @@ export interface ProcessedDocument {
 }
 
 // Re-export for convenience
-export type { InvoiceExtraction, DocumentType };
+export type { InvoiceExtraction, DocumentType, DocumentExtraction };

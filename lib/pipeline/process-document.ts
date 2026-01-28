@@ -1,11 +1,10 @@
 import { createHash } from "crypto";
 import { extractWithDocumentAI } from "../document-ai/ocr.js";
 import { classifyDocument } from "../gemini/classify-document.js";
-import { extractInvoiceWithGemini } from "../gemini/extract-invoice.js";
+import { extractDocument, type DocumentExtraction } from "../gemini/extract-document.js";
 import { uploadToGCS } from "../gcs/upload.js";
 import { saveDocument } from "../supabase/documents.js";
 import type { ProcessedDocument } from "./types.js";
-import type { InvoiceExtraction } from "../gemini/types.js";
 import type { DocumentType } from "../gemini/document-types.js";
 
 /**
@@ -18,19 +17,127 @@ function generateFileHash(buffer: Buffer): string {
 /**
  * Create an empty extraction result for failed pipelines
  */
-function createEmptyExtraction(): InvoiceExtraction {
-  return {
-    vendor: null,
-    invoice_number: null,
-    invoice_date: null,
-    due_date: null,
-    subtotal: null,
-    tax: null,
-    total: null,
-    line_items: [],
+function createEmptyExtraction(documentType: DocumentType): DocumentExtraction {
+  const emptyData = {
     confidence: 0,
     raw_response: "",
   };
+
+  // Return appropriate empty extraction based on type
+  switch (documentType) {
+    case "invoice":
+      return {
+        type: "invoice",
+        data: {
+          vendor: null,
+          invoice_number: null,
+          invoice_date: null,
+          due_date: null,
+          subtotal: null,
+          tax: null,
+          total: null,
+          line_items: [],
+          ...emptyData,
+        },
+      };
+    case "bank_statement":
+      return {
+        type: "bank_statement",
+        data: {
+          bank_name: null,
+          account_number_last4: null,
+          statement_period_start: null,
+          statement_period_end: null,
+          opening_balance: null,
+          closing_balance: null,
+          total_deposits: null,
+          total_withdrawals: null,
+          transactions: [],
+          ...emptyData,
+        },
+      };
+    case "receipt":
+      return {
+        type: "receipt",
+        data: {
+          merchant_name: null,
+          date: null,
+          total: null,
+          payment_method: null,
+          items: [],
+          subtotal: null,
+          tax: null,
+          tip: null,
+          ...emptyData,
+        },
+      };
+    case "contract":
+      return {
+        type: "contract",
+        data: {
+          contract_type: null,
+          parties: [],
+          effective_date: null,
+          expiration_date: null,
+          value: null,
+          key_terms: [],
+          governing_law: null,
+          termination_clause: null,
+          ...emptyData,
+        },
+      };
+    case "tax_form":
+      return {
+        type: "tax_form",
+        data: {
+          form_type: null,
+          tax_year: null,
+          entity_name: null,
+          entity_type: null,
+          ein_last4: null,
+          ssn_last4: null,
+          address: null,
+          total_income: null,
+          total_tax: null,
+          tax_withheld: null,
+          refund_or_owed: null,
+          ...emptyData,
+        },
+      };
+    case "correspondence":
+      return {
+        type: "correspondence",
+        data: {
+          sender: null,
+          sender_organization: null,
+          recipient: null,
+          recipient_organization: null,
+          date: null,
+          subject: null,
+          summary: null,
+          correspondence_type: null,
+          action_items: [],
+          urgency: null,
+          ...emptyData,
+        },
+      };
+    case "other":
+    default:
+      return {
+        type: "other",
+        data: {
+          vendor: null,
+          invoice_number: null,
+          invoice_date: null,
+          due_date: null,
+          subtotal: null,
+          tax: null,
+          total: null,
+          line_items: [],
+          ...emptyData,
+        },
+      };
+  }
 }
 
 /**
@@ -59,9 +166,9 @@ export async function processDocument(
       processedAt,
       ocrConfidence: 0,
       rawText: "",
-      documentType: "other" as DocumentType,
+      documentType: "other",
       classificationConfidence: 0,
-      extraction: createEmptyExtraction(),
+      extraction: createEmptyExtraction("other"),
       status: "ocr_failed",
       error: `OCR failed: ${ocrResult.error.code} - ${ocrResult.error.message}`,
     };
@@ -80,12 +187,11 @@ export async function processDocument(
     console.warn(`Classification warning: ${errorMessage}`);
   }
 
-  // Step 3: Extract structured data with Gemini
-  // For now, use invoice extraction for all document types
-  // TODO: Add type-specific extractors
-  let extraction: InvoiceExtraction;
+  // Step 3: Extract structured data with Gemini (type-specific)
+  let extraction: DocumentExtraction;
   try {
-    extraction = await extractInvoiceWithGemini(ocrResult.rawText);
+    extraction = await extractDocument(documentType, ocrResult.rawText);
+    console.log(`  Extraction: ${extraction.type} (${(extraction.data.confidence * 100).toFixed(0)}% confidence)`);
   } catch (err) {
     const errorMessage =
       err instanceof Error ? err.message : "Unknown extraction error";
@@ -97,14 +203,14 @@ export async function processDocument(
       rawText: ocrResult.rawText,
       documentType,
       classificationConfidence,
-      extraction: createEmptyExtraction(),
+      extraction: createEmptyExtraction(documentType),
       status: "extraction_failed",
       error: `Extraction failed: ${errorMessage}`,
     };
   }
 
   // Check if extraction actually produced meaningful results
-  if (extraction.confidence === 0) {
+  if (extraction.data.confidence === 0) {
     return {
       fileName,
       fileHash,

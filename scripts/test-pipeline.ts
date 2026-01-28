@@ -63,21 +63,30 @@ async function main(): Promise<void> {
 
   // Extraction
   console.log("\n--- Extraction Layer ---");
-  console.log(`Vendor: ${result.extraction.vendor}`);
-  console.log(`Invoice Number: ${result.extraction.invoice_number}`);
-  console.log(`Invoice Date: ${result.extraction.invoice_date}`);
-  console.log(`Due Date: ${result.extraction.due_date}`);
-  console.log(`Subtotal: ${result.extraction.subtotal}`);
-  console.log(`Tax: ${result.extraction.tax}`);
-  console.log(`Total: ${result.extraction.total}`);
-  console.log(`Extraction Confidence: ${(result.extraction.confidence * 100).toFixed(1)}%`);
-  console.log(`Line Items: ${result.extraction.line_items.length}`);
+  console.log(`Document Type: ${result.extraction.type}`);
+  console.log(`Extraction Confidence: ${(result.extraction.data.confidence * 100).toFixed(1)}%`);
 
-  if (result.extraction.line_items.length > 0) {
-    console.log("\n--- Line Items ---");
-    result.extraction.line_items.forEach((item, index) => {
-      console.log(`  ${index + 1}. ${item.description} - Qty: ${item.quantity}, Price: ${item.unit_price}, Amount: ${item.amount}`);
-    });
+  // Display type-specific extraction data
+  const data = result.extraction.data;
+  if (result.extraction.type === "invoice" || result.extraction.type === "other") {
+    const invoiceData = data as { vendor: string | null; invoice_number: string | null; invoice_date: string | null; due_date: string | null; subtotal: number | null; tax: number | null; total: number | null; line_items: Array<{ description: string; quantity: number | null; unit_price: number | null; amount: number | null }> };
+    console.log(`Vendor: ${invoiceData.vendor}`);
+    console.log(`Invoice Number: ${invoiceData.invoice_number}`);
+    console.log(`Invoice Date: ${invoiceData.invoice_date}`);
+    console.log(`Due Date: ${invoiceData.due_date}`);
+    console.log(`Subtotal: ${invoiceData.subtotal}`);
+    console.log(`Tax: ${invoiceData.tax}`);
+    console.log(`Total: ${invoiceData.total}`);
+    console.log(`Line Items: ${invoiceData.line_items.length}`);
+
+    if (invoiceData.line_items.length > 0) {
+      console.log("\n--- Line Items ---");
+      invoiceData.line_items.forEach((item, index) => {
+        console.log(`  ${index + 1}. ${item.description} - Qty: ${item.quantity}, Price: ${item.unit_price}, Amount: ${item.amount}`);
+      });
+    }
+  } else {
+    console.log("Extraction Data:", JSON.stringify(data, null, 2));
   }
 
   // Storage
@@ -89,12 +98,14 @@ async function main(): Promise<void> {
 
   const statusPass = result.status === "success";
   const hashPass = /^[a-f0-9]{64}$/.test(result.fileHash);
-  const totalPass = result.extraction.total === 93.5;
+  const extractionData = result.extraction.data;
+  const extractedTotal = "total" in extractionData ? extractionData.total : null;
+  const totalPass = extractedTotal === 93.5;
   const gcsPass = result.gcsPath?.startsWith("gs://") ?? false;
 
   console.log(`Status is 'success': ${statusPass ? "PASS" : "FAIL"} (got: ${result.status})`);
   console.log(`File hash is 64-char hex: ${hashPass ? "PASS" : "FAIL"} (got: ${result.fileHash.length} chars)`);
-  console.log(`Total is 93.50: ${totalPass ? "PASS" : "FAIL"} (got: ${result.extraction.total})`);
+  console.log(`Total is 93.50: ${totalPass ? "PASS" : "FAIL"} (got: ${extractedTotal})`);
   console.log(`GCS path starts with "gs://": ${gcsPass ? "PASS" : "FAIL"} (got: ${result.gcsPath || "undefined"})`);
 
   const allPassed = statusPass && hashPass && totalPass && gcsPass;

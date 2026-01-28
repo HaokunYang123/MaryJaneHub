@@ -99,7 +99,13 @@ export async function processInboxFile(
     };
   }
 
-  console.log(`  Pipeline complete: ${pipelineResult.extraction.vendor || "Unknown"} - $${pipelineResult.extraction.total || 0}`);
+  const extractionData = pipelineResult.extraction.data;
+  const displayName = "vendor" in extractionData ? extractionData.vendor :
+                      "merchant_name" in extractionData ? extractionData.merchant_name :
+                      "bank_name" in extractionData ? extractionData.bank_name : "Unknown";
+  const displayTotal = "total" in extractionData ? extractionData.total :
+                       "closing_balance" in extractionData ? extractionData.closing_balance : 0;
+  console.log(`  Pipeline complete: ${displayName || "Unknown"} - $${displayTotal || 0}`);
 
   // Step 4: Generate clean filename from extraction
   console.log("  [4/6] Generating clean filename...");

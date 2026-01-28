@@ -1,0 +1,146 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { z } from "zod";
+
+// Zod schemas
+const ActionItemSchema = z.object({
+  action: z.string(),
+  assignee: z.string().nullable(),
+  due_date: z.string().nullable(),
+});
+
+const CorrespondenceResponseSchema = z.object({
+  sender: z.string().nullable(),
+  sender_organization: z.string().nullable(),
+  recipient: z.string().nullable(),
+  recipient_organization: z.string().nullable(),
+  date: z.string().nullable(),
+  subject: z.string().nullable(),
+  summary: z.string().nullable(),
+  correspondence_type: z.string().nullable(),
+  action_items: z.array(ActionItemSchema).optional(),
+  urgency: z.string().nullable(),
+});
+
+// Export types
+export type ActionItem = z.infer<typeof ActionItemSchema>;
+export type CorrespondenceExtraction = z.infer<typeof CorrespondenceResponseSchema> & {
+  confidence: number;
+  raw_response: string;
+};
+
+const EXTRACTION_PROMPT = `You are a correspondence data extraction assistant. Extract structured data from the following letter, email, or notice text.
+
+IMPORTANT INSTRUCTIONS:
+1. Return ONLY valid JSON, no markdown code blocks, no explanations
+2. Use null for any fields you cannot find or are uncertain about
+3. Parse dates into ISO format (YYYY-MM-DD)
+4. For correspondence_type, identify: letter, email, memo, notice, announcement, or other
+5. Extract any action items or requests mentioned in the text
+
+Return this exact JSON structure:
+{
+  "sender": "sender name or null",
+  "sender_organization": "sender's company/org or null",
+  "recipient": "recipient name or null",
+  "recipient_organization": "recipient's company/org or null",
+  "date": "YYYY-MM-DD or null",
+  "subject": "subject line or topic or null",
+  "summary": "brief 1-2 sentence summary of the content or null",
+  "correspondence_type": "letter|email|memo|notice|announcement|other or null",
+  "action_items": [
+    {
+      "action": "description of action needed",
+      "assignee": "who should do it or null",
+      "due_date": "YYYY-MM-DD or null"
+    }
+  ],
+  "urgency": "high|medium|low or null"
+}
+
+CORRESPONDENCE TEXT:
+`;
+
+function calculateConfidence(data: z.infer<typeof CorrespondenceResponseSchema>): number {
+  const fields = [
+    data.sender,
+    data.recipient,
+    data.date,
+    data.subject,
+    data.summary,
+    data.correspondence_type,
+  ];
+
+  const extractedFields = fields.filter((f) => f !== null && f !== undefined).length;
+  const totalFields = fields.length;
+
+  const hasActionItems = data.action_items && data.action_items.length > 0;
+  const bonus = hasActionItems ? 0.1 : 0;
+
+  const baseConfidence = extractedFields / totalFields;
+  return Math.min(1, baseConfidence + bonus);
+}
+
+function parseResponse(rawResponse: string): z.infer<typeof CorrespondenceResponseSchema> {
+  let cleaned = rawResponse.trim();
+  if (cleaned.startsWith("```json")) {
+    cleaned = cleaned.slice(7);
+  } else if (cleaned.startsWith("```")) {
+    cleaned = cleaned.slice(3);
+  }
+  if (cleaned.endsWith("```")) {
+    cleaned = cleaned.slice(0, -3);
+  }
+  cleaned = cleaned.trim();
+
+  const parsed = JSON.parse(cleaned);
+  return CorrespondenceResponseSchema.parse(parsed);
+}
+
+export async function extractCorrespondence(rawText: string): Promise<CorrespondenceExtraction> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY environment variable is required");
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+  const prompt = EXTRACTION_PROMPT + rawText;
+  const result = await model.generateContent(prompt);
+  const response = result.response;
+  const rawResponse = response.text();
+
+  try {
+    const parsed = parseResponse(rawResponse);
+
+    return {
+      sender: parsed.sender ?? null,
+      sender_organization: parsed.sender_organization ?? null,
+      recipient: parsed.recipient ?? null,
+      recipient_organization: parsed.recipient_organization ?? null,
+      date: parsed.date ?? null,
+      subject: parsed.subject ?? null,
+      summary: parsed.summary ?? null,
+      correspondence_type: parsed.correspondence_type ?? null,
+      action_items: parsed.action_items || [],
+      urgency: parsed.urgency ?? null,
+      confidence: calculateConfidence(parsed),
+      raw_response: rawResponse,
+    };
+  } catch {
+    return {
+      sender: null,
+      sender_organization: null,
+      recipient: null,
+      recipient_organization: null,
+      date: null,
+      subject: null,
+      summary: null,
+      correspondence_type: null,
+      action_items: [],
+      urgency: null,
+      confidence: 0,
+      raw_response: rawResponse,
+    };
+  }
+}

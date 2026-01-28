@@ -56,8 +56,12 @@ async function main(): Promise<void> {
   console.log(`File Hash: ${result.fileHash}`);
   console.log(`GCS Path: ${result.gcsPath || "(not uploaded)"}`);
   console.log(`Document ID: ${result.documentId || "(not saved)"}`);
-  console.log(`Vendor: ${result.extraction.vendor}`);
-  console.log(`Total: ${result.extraction.total}`);
+  console.log(`Document Type: ${result.extraction.type}`);
+  const resultData = result.extraction.data;
+  const resultVendor = "vendor" in resultData ? resultData.vendor : null;
+  const resultTotal = "total" in resultData ? resultData.total : null;
+  console.log(`Vendor: ${resultVendor}`);
+  console.log(`Total: ${resultTotal}`);
 
   // Step 2: Query document back from Supabase
   console.log("\n=== Querying Supabase ===\n");
@@ -75,8 +79,11 @@ async function main(): Promise<void> {
   console.log(`  Status: ${dbDocument.status}`);
   console.log(`  Created At: ${dbDocument.created_at}`);
   console.log(`  Extraction Confidence: ${dbDocument.extraction_confidence}`);
-  console.log(`  Vendor: ${dbDocument.extraction.vendor}`);
-  console.log(`  Total: ${dbDocument.extraction.total}`);
+  const dbData = dbDocument.extraction.data;
+  const dbVendor = "vendor" in dbData ? dbData.vendor : null;
+  const dbTotal = "total" in dbData ? dbData.total : null;
+  console.log(`  Vendor: ${dbVendor}`);
+  console.log(`  Total: ${dbTotal}`);
 
   // Step 3: Check audit logs
   console.log("\n=== Checking Audit Logs ===\n");
@@ -101,9 +108,7 @@ async function main(): Promise<void> {
   const pipelineSuccess = result.status === "success";
   const documentSaved = !!result.documentId;
   const documentQueried = !!dbDocument;
-  const dataMatches =
-    dbDocument.extraction.vendor === result.extraction.vendor &&
-    dbDocument.extraction.total === result.extraction.total;
+  const dataMatches = dbVendor === resultVendor && dbTotal === resultTotal;
   const auditLogExists = auditLogs.some((log) => log.action === "created");
 
   console.log(`Pipeline status is 'success': ${pipelineSuccess ? "PASS" : "FAIL"}`);

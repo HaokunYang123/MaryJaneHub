@@ -54,7 +54,7 @@ export async function saveDocument(
         document_type: doc.documentType || "other",
         classification_confidence: doc.classificationConfidence || 0,
         extraction: doc.extraction as unknown as Record<string, unknown>,
-        extraction_confidence: doc.extraction.confidence,
+        extraction_confidence: doc.extraction.data.confidence,
         status: "draft",
       })
       .select("id")
