@@ -33,11 +33,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. RLS policies deny frontend (anon/authenticated) access to sensitive tables
   4. Super-admin users (Mary + accountant) can see all entities through RLS
   5. Audit log captures INSERT/UPDATE/DELETE on sensitive tables with who/when/what
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: Entity model and Vault setup
-- [ ] 01-02: RLS policies and audit logging
+- [ ] 01-01-PLAN.md — Entity model, Vault extension, bank_connections table, admin client
+- [ ] 01-02-PLAN.md — RLS policies, auth helper functions, audit logging, soft deletes
 
 ### Phase 2: Plaid Link & Token Exchange
 **Goal**: Users can connect bank accounts with plug-and-play UI and tokens are never exposed
@@ -164,7 +164,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Security Foundation & Entity Model | 0/2 | Not started | - |
+| 1. Security Foundation & Entity Model | 0/2 | Planned | - |
 | 2. Plaid Link & Token Exchange | 0/2 | Not started | - |
 | 3. Transaction Sync & Webhooks | 0/3 | Not started | - |
 | 4. Manual Entry | 0/1 | Not started | - |
