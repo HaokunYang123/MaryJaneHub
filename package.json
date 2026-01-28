@@ -10,7 +10,8 @@
     "test:supabase": "npx tsx scripts/test-supabase.ts",
     "test:drive": "npx tsx scripts/test-drive.ts",
     "workflow": "npx tsx scripts/test-full-workflow.ts",
-    "poll": "npx tsx scripts/poll-inbox.ts"
+    "poll": "npx tsx scripts/poll-inbox.ts",
+    "test:classifier": "npx tsx scripts/test-classifier.ts"
   },
   "dependencies": {
     "@google-cloud/documentai": "^8.12.0",

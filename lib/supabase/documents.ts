@@ -51,6 +51,8 @@ export async function saveDocument(
         gcs_path: doc.gcsPath || null,
         ocr_confidence: doc.ocrConfidence,
         raw_text: doc.rawText,
+        document_type: doc.documentType || "other",
+        classification_confidence: doc.classificationConfidence || 0,
         extraction: doc.extraction as unknown as Record<string, unknown>,
         extraction_confidence: doc.extraction.confidence,
         status: "draft",

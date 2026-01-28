@@ -1,4 +1,5 @@
 import type { InvoiceExtraction } from "../gemini/types.js";
+import type { DocumentType } from "../gemini/document-types.js";
 
 /**
  * Document status in the workflow
@@ -17,6 +18,8 @@ export interface DocumentRecord {
   drive_file_id: string | null;
   ocr_confidence: number | null;
   raw_text: string | null;
+  document_type: DocumentType | null;
+  classification_confidence: number | null;
   extraction: InvoiceExtraction;
   extraction_confidence: number | null;
   human_overrides: Record<string, unknown> | null;
@@ -68,4 +71,6 @@ export interface SaveDocumentInput {
   ocrConfidence: number;
   rawText: string;
   extraction: InvoiceExtraction;
+  documentType?: DocumentType;
+  classificationConfidence?: number;
 }

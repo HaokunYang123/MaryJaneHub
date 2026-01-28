@@ -1,10 +1,12 @@
 import { createHash } from "crypto";
 import { extractWithDocumentAI } from "../document-ai/ocr.js";
+import { classifyDocument } from "../gemini/classify-document.js";
 import { extractInvoiceWithGemini } from "../gemini/extract-invoice.js";
 import { uploadToGCS } from "../gcs/upload.js";
 import { saveDocument } from "../supabase/documents.js";
 import type { ProcessedDocument } from "./types.js";
 import type { InvoiceExtraction } from "../gemini/types.js";
+import type { DocumentType } from "../gemini/document-types.js";
 
 /**
  * Generate SHA256 hash of a buffer
@@ -57,13 +59,30 @@ export async function processDocument(
       processedAt,
       ocrConfidence: 0,
       rawText: "",
+      documentType: "other" as DocumentType,
+      classificationConfidence: 0,
       extraction: createEmptyExtraction(),
       status: "ocr_failed",
       error: `OCR failed: ${ocrResult.error.code} - ${ocrResult.error.message}`,
     };
   }
 
-  // Step 2: Extract structured data with Gemini
+  // Step 2: Classify document type
+  let documentType: DocumentType = "other";
+  let classificationConfidence = 0;
+  try {
+    const classification = await classifyDocument(ocrResult.rawText);
+    documentType = classification.documentType;
+    classificationConfidence = classification.confidence;
+    console.log(`  Classification: ${documentType} (${(classificationConfidence * 100).toFixed(0)}% confidence)`);
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    console.warn(`Classification warning: ${errorMessage}`);
+  }
+
+  // Step 3: Extract structured data with Gemini
+  // For now, use invoice extraction for all document types
+  // TODO: Add type-specific extractors
   let extraction: InvoiceExtraction;
   try {
     extraction = await extractInvoiceWithGemini(ocrResult.rawText);
@@ -76,6 +95,8 @@ export async function processDocument(
       processedAt,
       ocrConfidence: ocrResult.confidence,
       rawText: ocrResult.rawText,
+      documentType,
+      classificationConfidence,
       extraction: createEmptyExtraction(),
       status: "extraction_failed",
       error: `Extraction failed: ${errorMessage}`,
@@ -90,13 +111,15 @@ export async function processDocument(
       processedAt,
       ocrConfidence: ocrResult.confidence,
       rawText: ocrResult.rawText,
+      documentType,
+      classificationConfidence,
       extraction,
       status: "extraction_failed",
       error: "Extraction produced no valid data",
     };
   }
 
-  // Step 3: Upload to GCS for archival (non-blocking on failure)
+  // Step 4: Upload to GCS for archival (non-blocking on failure)
   let gcsPath: string | undefined;
   try {
     const gcsResult = await uploadToGCS(fileBuffer, fileName, fileHash, mimeType);
@@ -110,7 +133,7 @@ export async function processDocument(
     console.warn(`GCS upload warning: ${errorMessage}`);
   }
 
-  // Step 4: Save to Supabase (non-blocking on failure)
+  // Step 5: Save to Supabase (non-blocking on failure)
   let documentId: string | undefined;
   try {
     const saveResult = await saveDocument({
@@ -121,6 +144,8 @@ export async function processDocument(
       ocrConfidence: ocrResult.confidence,
       rawText: ocrResult.rawText,
       extraction,
+      documentType,
+      classificationConfidence,
     });
     if (saveResult.success) {
       documentId = saveResult.documentId;
@@ -141,6 +166,8 @@ export async function processDocument(
     processedAt,
     ocrConfidence: ocrResult.confidence,
     rawText: ocrResult.rawText,
+    documentType,
+    classificationConfidence,
     extraction,
     gcsPath,
     documentId,

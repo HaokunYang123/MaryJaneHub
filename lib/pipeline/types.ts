@@ -1,4 +1,5 @@
 import type { InvoiceExtraction } from "../gemini/types.js";
+import type { DocumentType } from "../gemini/document-types.js";
 
 /**
  * Status of document processing
@@ -18,6 +19,10 @@ export interface ProcessedDocument {
   ocrConfidence: number;
   rawText: string;
 
+  // Classification layer
+  documentType: DocumentType;
+  classificationConfidence: number;
+
   // Extraction layer
   extraction: InvoiceExtraction;
 
@@ -33,4 +38,4 @@ export interface ProcessedDocument {
 }
 
 // Re-export for convenience
-export type { InvoiceExtraction };
+export type { InvoiceExtraction, DocumentType };
