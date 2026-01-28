@@ -343,9 +343,88 @@ async function main(): Promise<void> {
   }
 
   // =========================================================================
-  // STEP 5: Summary
+  // STEP 5: Duplicate Detection Test
   // =========================================================================
-  printStep(5, "DATABASE SUMMARY");
+  printStep(5, "DUPLICATE DETECTION TEST");
+
+  if (!result.documentId) {
+    console.log("  SKIP: No document ID from first run");
+  } else {
+    console.log("  Running pipeline again with same data...\n");
+
+    let duplicateResult;
+
+    if (useMockText) {
+      // Run pipeline with same mock text
+      const { classifyDocument } = await import("../lib/gemini/classify-document.js");
+      const { extractDocument } = await import("../lib/gemini/extract-document.js");
+      const { analyzeDocument } = await import("../lib/workflow/review-flags.js");
+      const { saveDocument } = await import("../lib/supabase/documents.js");
+      const { createHash } = await import("crypto");
+
+      // Use same hash as before
+      const fileHash = createHash("sha256").update(MOCK_INVOICE_TEXT).digest("hex");
+
+      // Simulate calling saveDocument which checks for duplicates
+      const saveResult = await saveDocument({
+        fileName: "mock-invoice-duplicate.pdf",
+        fileHash,
+        mimeType: "application/pdf",
+        ocrConfidence: 0.95,
+        rawText: MOCK_INVOICE_TEXT,
+        extraction: result.extraction,
+        documentType: result.documentType,
+        classificationConfidence: result.classificationConfidence,
+        syncStatus: result.syncStatus,
+        confidenceScore: result.extraction.data.confidence,
+        reviewFlags: result.reviewFlags || [],
+      });
+
+      if (saveResult.alreadyExists) {
+        duplicateResult = {
+          status: "duplicate",
+          existingDocumentId: saveResult.documentId,
+        };
+      } else {
+        duplicateResult = {
+          status: "unexpected_new",
+          documentId: saveResult.documentId,
+        };
+      }
+    } else {
+      // Process same PDF again
+      const fileBuffer = await readFile(SAMPLE_PDF_PATH);
+      const secondResult = await processDocument(fileBuffer, "application/pdf", "sample-bill.pdf");
+      duplicateResult = {
+        status: secondResult.status,
+        existingDocumentId: secondResult.existingDocumentId,
+        documentId: secondResult.documentId,
+      };
+    }
+
+    console.log(`  Second Run Result:`);
+    console.log(`    Status: ${duplicateResult.status}`);
+
+    if (duplicateResult.status === "duplicate") {
+      console.log(`    Existing Document ID: ${duplicateResult.existingDocumentId}`);
+      console.log(`    Expected ID: ${result.documentId}`);
+      const idsMatch = duplicateResult.existingDocumentId === result.documentId;
+      console.log(`\n  Duplicate Detection: ${idsMatch ? "PASS" : "FAIL"}`);
+      if (!idsMatch) {
+        console.log(`    WARNING: Document IDs don't match!`);
+      }
+    } else if (duplicateResult.status === "unexpected_new") {
+      console.log(`  WARNING: saveDocument returned alreadyExists=false`);
+      console.log(`    This might indicate the duplicate check in saveDocument failed`);
+    } else {
+      console.log(`  WARNING: Expected 'duplicate' status, got '${duplicateResult.status}'`);
+    }
+  }
+
+  // =========================================================================
+  // STEP 6: Summary
+  // =========================================================================
+  printStep(6, "DATABASE SUMMARY");
 
   try {
     const summary = await getSyncStatusSummary();

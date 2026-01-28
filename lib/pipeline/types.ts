@@ -6,7 +6,7 @@ import type { SyncStatus, ReviewFlag } from "../workflow/review-flags.js";
 /**
  * Status of document processing
  */
-export type ProcessingStatus = "success" | "ocr_failed" | "extraction_failed";
+export type ProcessingStatus = "success" | "duplicate" | "ocr_failed" | "extraction_failed";
 
 /**
  * Result of the complete document processing pipeline
@@ -33,6 +33,7 @@ export interface ProcessedDocument {
 
   // Database layer
   documentId?: string; // Supabase document ID if saved successfully
+  existingDocumentId?: string; // If duplicate, the ID of the existing document
 
   // Sync workflow
   syncStatus?: SyncStatus;

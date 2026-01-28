@@ -3,7 +3,7 @@ import { extractWithDocumentAI } from "../document-ai/ocr.js";
 import { classifyDocument } from "../gemini/classify-document.js";
 import { extractDocument, type DocumentExtraction } from "../gemini/extract-document.js";
 import { uploadToGCS } from "../gcs/upload.js";
-import { saveDocument } from "../supabase/documents.js";
+import { saveDocument, getDocumentByHash } from "../supabase/documents.js";
 import { analyzeDocument, type SyncStatus, type ReviewFlag } from "../workflow/review-flags.js";
 import type { ProcessedDocument } from "./types.js";
 import type { DocumentType } from "../gemini/document-types.js";
@@ -152,10 +152,41 @@ function createEmptyExtraction(documentType: DocumentType): DocumentExtraction {
 export async function processDocument(
   fileBuffer: Buffer,
   mimeType: string,
-  fileName: string
+  fileName: string,
+  options: { skipDuplicateCheck?: boolean } = {}
 ): Promise<ProcessedDocument> {
   const fileHash = generateFileHash(fileBuffer);
   const processedAt = new Date().toISOString();
+
+  // Step 0: Check for duplicate (by file hash)
+  if (!options.skipDuplicateCheck) {
+    try {
+      const existingDoc = await getDocumentByHash(fileHash);
+      if (existingDoc) {
+        console.log(`  Duplicate detected: Document already exists (ID: ${existingDoc.id})`);
+        return {
+          fileName,
+          fileHash,
+          processedAt,
+          ocrConfidence: existingDoc.ocr_confidence || 0,
+          rawText: existingDoc.raw_text || "",
+          documentType: existingDoc.document_type || "other",
+          classificationConfidence: existingDoc.classification_confidence || 0,
+          extraction: existingDoc.extraction,
+          documentId: existingDoc.id,
+          existingDocumentId: existingDoc.id,
+          syncStatus: existingDoc.sync_status,
+          reviewFlags: existingDoc.review_flags || [],
+          gcsPath: existingDoc.gcs_path || undefined,
+          status: "duplicate",
+        };
+      }
+    } catch (err) {
+      // Non-blocking: if duplicate check fails, continue processing
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      console.warn(`  Duplicate check warning: ${errorMessage}`);
+    }
+  }
 
   // Step 1: OCR with Document AI
   const ocrResult = await extractWithDocumentAI(fileBuffer, mimeType);

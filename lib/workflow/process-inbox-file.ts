@@ -1,10 +1,9 @@
 import { downloadFile } from "../google-drive/download.js";
 import { moveAndRenameFile } from "../google-drive/move-file.js";
 import { processDocument } from "../pipeline/process-document.js";
-import { updateDocumentDriveInfo, getDocumentByHash } from "../supabase/documents.js";
+import { updateDocumentDriveInfo } from "../supabase/documents.js";
 import { generateCleanFilename } from "../utils/filename.js";
 import type { WorkflowResult } from "./types.js";
-import { createHash } from "crypto";
 
 /**
  * Get folder IDs from environment
@@ -28,12 +27,10 @@ function getFolderIds() {
  *
  * Steps:
  * 1. Download file from Drive
- * 2. Check if already processed (by hash)
- * 3. Run pipeline (OCR → Gemini → GCS → Supabase)
- * 4. Generate clean filename from extraction
- * 5. Move and rename file to Processed folder
- * 6. Update document in Supabase with drive_file_id
- * 7. Return result
+ * 2. Run pipeline (includes duplicate check, OCR → Gemini → GCS → Supabase)
+ * 3. Generate clean filename from extraction
+ * 4. Move and rename file to Processed folder
+ * 5. Update document in Supabase with drive_file_id
  */
 export async function processInboxFile(
   fileId: string,
@@ -45,7 +42,7 @@ export async function processInboxFile(
   console.log(`\n--- Processing: ${fileName} ---`);
 
   // Step 1: Download file from Drive
-  console.log("  [1/6] Downloading from Drive...");
+  console.log("  [1/5] Downloading from Drive...");
   const downloadResult = await downloadFile(fileId);
 
   if (!downloadResult.success || !downloadResult.buffer) {
@@ -60,16 +57,16 @@ export async function processInboxFile(
   const fileBuffer = downloadResult.buffer;
   console.log(`  Downloaded: ${(fileBuffer.length / 1024).toFixed(2)} KB`);
 
-  // Step 2: Check if already processed (by hash)
-  console.log("  [2/6] Checking for duplicates...");
-  const fileHash = createHash("sha256").update(fileBuffer).digest("hex");
+  // Step 2: Run pipeline (includes duplicate check, OCR → Gemini → GCS → Supabase)
+  console.log("  [2/5] Running processing pipeline...");
+  const pipelineResult = await processDocument(fileBuffer, mimeType, fileName);
 
-  const existingDoc = await getDocumentByHash(fileHash);
-  if (existingDoc) {
-    console.log(`  SKIPPED: File already processed (document ID: ${existingDoc.id})`);
+  // Handle duplicate detection
+  if (pipelineResult.status === "duplicate") {
+    console.log(`  DUPLICATE: File already processed (document ID: ${pipelineResult.existingDocumentId})`);
 
-    // Still move the file to processed folder to clean up inbox
-    const cleanName = generateCleanFilename(existingDoc.extraction, fileName);
+    // Move the duplicate file to processed folder to clean up inbox
+    const cleanName = generateCleanFilename(pipelineResult.extraction, fileName);
     try {
       await moveAndRenameFile(fileId, cleanName, processedFolderId, inboxFolderId);
       console.log(`  Moved duplicate to Processed folder as: ${cleanName}`);
@@ -79,16 +76,12 @@ export async function processInboxFile(
 
     return {
       success: true,
-      documentId: existingDoc.id,
+      documentId: pipelineResult.existingDocumentId,
       originalName: fileName,
       newName: cleanName,
       skipped: true,
     };
   }
-
-  // Step 3: Run pipeline (OCR → Gemini → GCS → Supabase)
-  console.log("  [3/6] Running processing pipeline...");
-  const pipelineResult = await processDocument(fileBuffer, mimeType, fileName);
 
   if (pipelineResult.status !== "success") {
     console.log(`  ERROR: Pipeline failed - ${pipelineResult.error}`);
@@ -107,13 +100,13 @@ export async function processInboxFile(
                        "closing_balance" in extractionData ? extractionData.closing_balance : 0;
   console.log(`  Pipeline complete: ${displayName || "Unknown"} - $${displayTotal || 0}`);
 
-  // Step 4: Generate clean filename from extraction
-  console.log("  [4/6] Generating clean filename...");
+  // Step 3: Generate clean filename from extraction
+  console.log("  [3/5] Generating clean filename...");
   const cleanName = generateCleanFilename(pipelineResult.extraction, fileName);
   console.log(`  New name: ${cleanName}`);
 
-  // Step 5: Move and rename file to Processed folder
-  console.log("  [5/6] Moving to Processed folder...");
+  // Step 4: Move and rename file to Processed folder
+  console.log("  [4/5] Moving to Processed folder...");
   const moveResult = await moveAndRenameFile(
     fileId,
     cleanName,
@@ -128,8 +121,8 @@ export async function processInboxFile(
     console.log(`  Moved successfully`);
   }
 
-  // Step 6: Update document in Supabase with drive_file_id
-  console.log("  [6/6] Updating database with Drive info...");
+  // Step 5: Update document in Supabase with drive_file_id
+  console.log("  [5/5] Updating database with Drive info...");
   if (pipelineResult.documentId) {
     const updateSuccess = await updateDocumentDriveInfo(
       pipelineResult.documentId,
