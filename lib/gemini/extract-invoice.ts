@@ -3,7 +3,7 @@ import type {
   InvoiceExtraction,
   LineItem,
   GeminiInvoiceResponse,
-} from "./types.js";
+} from "./types";
 
 const EXTRACTION_PROMPT = `You are an invoice data extraction assistant. Extract structured data from the following invoice text.
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { processAllInboxFiles } from "../../../../lib/workflow/process-inbox.js";
+import { processAllInboxFiles } from "@/lib/workflow/process-inbox";
 
 /**
  * Vercel Cron endpoint for processing inbox files

@@ -1,7 +1,7 @@
-import type { InvoiceExtraction } from "../gemini/types.js";
-import type { DocumentType } from "../gemini/document-types.js";
-import type { DocumentExtraction } from "../gemini/extract-document.js";
-import type { SyncStatus, ReviewFlag } from "../workflow/review-flags.js";
+import type { InvoiceExtraction } from "../gemini/types";
+import type { DocumentType } from "../gemini/document-types";
+import type { DocumentExtraction } from "../gemini/extract-document";
+import type { SyncStatus, ReviewFlag } from "../workflow/review-flags";
 
 /**
  * Status of document processing

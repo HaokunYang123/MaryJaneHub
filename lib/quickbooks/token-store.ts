@@ -1,5 +1,5 @@
-import { getSupabase } from "../supabase/client.js";
-import type { QBTokens } from "./auth.js";
+import { getSupabase } from "../supabase/client";
+import type { QBTokens } from "./auth";
 
 /**
  * Token record as stored in Supabase

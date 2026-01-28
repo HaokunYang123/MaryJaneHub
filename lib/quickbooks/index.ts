@@ -1,6 +1,6 @@
 // Configuration
-export { getQBConfig, QB_API_BASE_URL, QB_SCOPES } from "./config.js";
-export type { QBConfig, QBEnvironment } from "./config.js";
+export { getQBConfig, QB_API_BASE_URL, QB_SCOPES } from "./config";
+export type { QBConfig, QBEnvironment } from "./config";
 
 // Authentication
 export {
@@ -9,8 +9,8 @@ export {
   exchangeCodeForTokens,
   refreshTokens,
   isTokenExpired,
-} from "./auth.js";
-export type { QBTokens } from "./auth.js";
+} from "./auth";
+export type { QBTokens } from "./auth";
 
 // Token Storage
 export {
@@ -18,8 +18,8 @@ export {
   getTokens,
   deleteTokens,
   isConnected,
-} from "./token-store.js";
-export type { QBTokenRecord } from "./token-store.js";
+} from "./token-store";
+export type { QBTokenRecord } from "./token-store";
 
 // API Client
 export {
@@ -32,7 +32,7 @@ export {
   createBill,
   getBill,
   getExpenseAccounts,
-} from "./api.js";
+} from "./api";
 
 // Types
 export type {
@@ -44,11 +44,11 @@ export type {
   QBBillLine,
   QBCompanyInfo,
   QBAccountBasedExpenseLineDetail,
-} from "./types.js";
+} from "./types";
 
 // Invoice to Bill Conversion
 export {
   convertInvoiceToBill,
   canConvertToBill,
   calculateLineItemsTotal,
-} from "./invoice-to-bill.js";
+} from "./invoice-to-bill";

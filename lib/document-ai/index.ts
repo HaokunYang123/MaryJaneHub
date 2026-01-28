@@ -1,4 +1,4 @@
-export { extractWithDocumentAI } from "./ocr.js";
+export { extractWithDocumentAI } from "./ocr";
 export type {
   DocumentAIResult,
   DocumentAISuccess,
@@ -7,4 +7,4 @@ export type {
   DetectedTable,
   TableRow,
   TableCell,
-} from "./types.js";
+} from "./types";

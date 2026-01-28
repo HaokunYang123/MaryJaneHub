@@ -1,12 +1,13 @@
 import { createHash } from "crypto";
-import { extractWithDocumentAI } from "../document-ai/ocr.js";
-import { classifyDocument } from "../gemini/classify-document.js";
-import { extractDocument, type DocumentExtraction } from "../gemini/extract-document.js";
-import { uploadToGCS } from "../gcs/upload.js";
-import { saveDocument, getDocumentByHash } from "../supabase/documents.js";
-import { analyzeDocument, type SyncStatus, type ReviewFlag } from "../workflow/review-flags.js";
-import type { ProcessedDocument } from "./types.js";
-import type { DocumentType } from "../gemini/document-types.js";
+import { extractWithDocumentAI } from "../document-ai/ocr";
+import { classifyDocument } from "../gemini/classify-document";
+import { extractDocument, type DocumentExtraction } from "../gemini/extract-document";
+import { uploadToGCS } from "../gcs/upload";
+import { saveDocument, getDocumentByHash } from "../supabase/documents";
+import { analyzeDocument, type SyncStatus, type ReviewFlag } from "../workflow/review-flags";
+import { generateAndStoreEmbedding } from "../search/semantic-search";
+import type { ProcessedDocument } from "./types";
+import type { DocumentType } from "../gemini/document-types";
 
 /**
  * Generate SHA256 hash of a buffer
@@ -153,7 +154,7 @@ export async function processDocument(
   fileBuffer: Buffer,
   mimeType: string,
   fileName: string,
-  options: { skipDuplicateCheck?: boolean } = {}
+  options: { skipDuplicateCheck?: boolean; skipEmbedding?: boolean } = {}
 ): Promise<ProcessedDocument> {
   const fileHash = generateFileHash(fileBuffer);
   const processedAt = new Date().toISOString();
@@ -316,6 +317,21 @@ export async function processDocument(
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown Supabase error";
     console.warn(`Supabase save warning: ${errorMessage}`);
+  }
+
+  // Step 7: Generate embedding for semantic search (non-blocking on failure)
+  if (!options.skipEmbedding && documentId && ocrResult.rawText) {
+    try {
+      const embeddingResult = await generateAndStoreEmbedding(documentId, ocrResult.rawText);
+      if (embeddingResult.success) {
+        console.log(`  Embedding generated (${embeddingResult.processingTimeMs}ms)`);
+      } else {
+        console.warn(`Embedding warning: ${embeddingResult.error}`);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown embedding error";
+      console.warn(`Embedding warning: ${errorMessage}`);
+    }
   }
 
   return {

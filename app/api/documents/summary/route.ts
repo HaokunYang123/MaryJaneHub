@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSyncStatusSummary } from "../../../../lib/supabase/documents.js";
-import { getSupabase } from "../../../../lib/supabase/client.js";
+import { getSyncStatusSummary } from "@/lib/supabase/documents";
+import { getSupabase } from "@/lib/supabase/client";
 
 /**
  * GET /api/documents/summary

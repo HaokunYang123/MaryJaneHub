@@ -1,5 +1,5 @@
-import type { InvoiceExtraction } from "../gemini/types.js";
-import type { QBBillInput } from "./types.js";
+import type { InvoiceExtraction } from "../gemini/types";
+import type { QBBillInput } from "./types";
 
 /**
  * Default expense account ID for bills

@@ -1,6 +1,6 @@
-export { processDocument } from "./process-document.js";
+export { processDocument } from "./process-document";
 export type {
   ProcessedDocument,
   ProcessingStatus,
   InvoiceExtraction,
-} from "./types.js";
+} from "./types";

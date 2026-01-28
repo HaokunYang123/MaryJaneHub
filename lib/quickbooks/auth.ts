@@ -1,5 +1,5 @@
 import OAuthClient from "intuit-oauth";
-import { getQBConfig, QB_SCOPES } from "./config.js";
+import { getQBConfig, QB_SCOPES } from "./config";
 
 /**
  * Token data returned from QuickBooks OAuth

@@ -1,4 +1,4 @@
-import type { DocumentExtraction } from "../gemini/extract-document.js";
+import type { DocumentExtraction } from "../gemini/extract-document";
 
 /**
  * Flags that indicate a document needs manual review

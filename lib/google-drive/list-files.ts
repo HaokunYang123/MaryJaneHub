@@ -1,6 +1,6 @@
-import { getDriveClient } from "./client.js";
-import type { DriveFile } from "./types.js";
-import { SUPPORTED_MIME_TYPES } from "./types.js";
+import { getDriveClient } from "./client";
+import type { DriveFile } from "./types";
+import { SUPPORTED_MIME_TYPES } from "./types";
 
 /**
  * List files in a Google Drive folder

@@ -1,5 +1,5 @@
-import { getSupabase } from "../supabase/client.js";
-import type { SyncStatus } from "./review-flags.js";
+import { getSupabase } from "../supabase/client";
+import type { SyncStatus } from "./review-flags";
 
 /**
  * Result of an approval operation

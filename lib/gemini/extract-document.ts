@@ -1,17 +1,17 @@
-import type { DocumentType } from "./document-types.js";
-import type { InvoiceExtraction } from "./types.js";
-import type { BankStatementExtraction } from "./extract-bank-statement.js";
-import type { ReceiptExtraction } from "./extract-receipt.js";
-import type { ContractExtraction } from "./extract-contract.js";
-import type { TaxFormExtraction } from "./extract-tax-form.js";
-import type { CorrespondenceExtraction } from "./extract-correspondence.js";
+import type { DocumentType } from "./document-types";
+import type { InvoiceExtraction } from "./types";
+import type { BankStatementExtraction } from "./extract-bank-statement";
+import type { ReceiptExtraction } from "./extract-receipt";
+import type { ContractExtraction } from "./extract-contract";
+import type { TaxFormExtraction } from "./extract-tax-form";
+import type { CorrespondenceExtraction } from "./extract-correspondence";
 
-import { extractInvoiceWithGemini } from "./extract-invoice.js";
-import { extractBankStatement } from "./extract-bank-statement.js";
-import { extractReceipt } from "./extract-receipt.js";
-import { extractContract } from "./extract-contract.js";
-import { extractTaxForm } from "./extract-tax-form.js";
-import { extractCorrespondence } from "./extract-correspondence.js";
+import { extractInvoiceWithGemini } from "./extract-invoice";
+import { extractBankStatement } from "./extract-bank-statement";
+import { extractReceipt } from "./extract-receipt";
+import { extractContract } from "./extract-contract";
+import { extractTaxForm } from "./extract-tax-form";
+import { extractCorrespondence } from "./extract-correspondence";
 
 /**
  * Union type of all possible extraction results

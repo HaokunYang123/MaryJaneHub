@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import type { ClassificationResult, DocumentType } from "./document-types.js";
-import { DOCUMENT_TYPE_DESCRIPTIONS, isValidDocumentType } from "./document-types.js";
+import type { ClassificationResult, DocumentType } from "./document-types";
+import { DOCUMENT_TYPE_DESCRIPTIONS, isValidDocumentType } from "./document-types";
 
 const CLASSIFICATION_PROMPT = `You are a document classification assistant. Analyze the following document text and determine its type.
 

@@ -1,4 +1,4 @@
-import type { DocumentExtraction } from "../gemini/extract-document.js";
+import type { DocumentExtraction } from "../gemini/extract-document";
 import { extname } from "path";
 
 /**

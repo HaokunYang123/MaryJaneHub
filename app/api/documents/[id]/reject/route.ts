@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { rejectDocument } from "../../../../../lib/workflow/approve-document.js";
-import { getDocumentById } from "../../../../../lib/supabase/documents.js";
+import { rejectDocument } from "@/lib/workflow/approve-document";
+import { getDocumentById } from "@/lib/supabase/documents";
 
 /**
  * POST /api/documents/[id]/reject

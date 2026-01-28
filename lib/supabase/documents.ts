@@ -1,11 +1,11 @@
-import { getSupabase } from "./client.js";
+import { getSupabase } from "./client";
 import type {
   DocumentRecord,
   SaveDocumentResult,
   SaveDocumentInput,
   DocumentStatus,
-} from "./types.js";
-import type { SyncStatus } from "../workflow/review-flags.js";
+} from "./types";
+import type { SyncStatus } from "../workflow/review-flags";
 
 /**
  * Save a processed document to Supabase

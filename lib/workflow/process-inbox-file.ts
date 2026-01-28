@@ -1,9 +1,9 @@
-import { downloadFile } from "../google-drive/download.js";
-import { moveAndRenameFile } from "../google-drive/move-file.js";
-import { processDocument } from "../pipeline/process-document.js";
-import { updateDocumentDriveInfo } from "../supabase/documents.js";
-import { generateCleanFilename } from "../utils/filename.js";
-import type { WorkflowResult } from "./types.js";
+import { downloadFile } from "../google-drive/download";
+import { moveAndRenameFile } from "../google-drive/move-file";
+import { processDocument } from "../pipeline/process-document";
+import { updateDocumentDriveInfo } from "../supabase/documents";
+import { generateCleanFilename } from "../utils/filename";
+import type { WorkflowResult } from "./types";
 
 /**
  * Get folder IDs from environment

@@ -1,11 +1,11 @@
-export { getDriveClient } from "./client.js";
-export { listNewFiles, getFileMetadata } from "./list-files.js";
-export { downloadFile } from "./download.js";
-export { moveAndRenameFile, renameFile } from "./move-file.js";
+export { getDriveClient } from "./client";
+export { listNewFiles, getFileMetadata } from "./list-files";
+export { downloadFile } from "./download";
+export { moveAndRenameFile, renameFile } from "./move-file";
 export type {
   DriveFile,
   MoveResult,
   DownloadResult,
   SupportedMimeType,
-} from "./types.js";
-export { SUPPORTED_MIME_TYPES, isSupportedMimeType } from "./types.js";
+} from "./types";
+export { SUPPORTED_MIME_TYPES, isSupportedMimeType } from "./types";

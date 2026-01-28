@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAuthorizationUrl } from "../../../../lib/quickbooks/auth.js";
+import { getAuthorizationUrl } from "@/lib/quickbooks/auth";
 
 /**
  * GET /api/quickbooks/connect

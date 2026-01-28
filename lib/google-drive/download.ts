@@ -1,5 +1,5 @@
-import { getDriveClient } from "./client.js";
-import type { DownloadResult } from "./types.js";
+import { getDriveClient } from "./client";
+import type { DownloadResult } from "./types";
 
 /**
  * Download a file from Google Drive as a Buffer

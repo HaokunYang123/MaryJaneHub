@@ -1,6 +1,6 @@
-import type { DocumentType } from "../gemini/document-types.js";
-import type { DocumentExtraction } from "../gemini/extract-document.js";
-import type { SyncStatus, ReviewFlag } from "../workflow/review-flags.js";
+import type { DocumentType } from "../gemini/document-types";
+import type { DocumentExtraction } from "../gemini/extract-document";
+import type { SyncStatus, ReviewFlag } from "../workflow/review-flags";
 
 /**
  * Document status in the workflow
@@ -35,6 +35,8 @@ export interface DocumentRecord {
   reviewed_by: string | null;
   synced_at: string | null;
   sync_error: string | null;
+  // Semantic search
+  embedding: number[] | null;
   // Timestamps
   created_at: string;
   updated_at: string;

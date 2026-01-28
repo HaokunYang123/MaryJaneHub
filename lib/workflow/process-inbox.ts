@@ -1,6 +1,6 @@
-import { listNewFiles } from "../google-drive/list-files.js";
-import { processInboxFile } from "./process-inbox-file.js";
-import type { BatchResult, WorkflowResult } from "./types.js";
+import { listNewFiles } from "../google-drive/list-files";
+import { processInboxFile } from "./process-inbox-file";
+import type { BatchResult, WorkflowResult } from "./types";
 
 /**
  * Get inbox folder ID from environment

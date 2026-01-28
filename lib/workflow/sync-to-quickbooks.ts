@@ -1,12 +1,12 @@
-import { getSupabase } from "../supabase/client.js";
+import { getSupabase } from "../supabase/client";
 import {
   findOrCreateVendor,
   createBill,
   getExpenseAccounts,
-} from "../quickbooks/api.js";
-import { convertInvoiceToBill, canConvertToBill } from "../quickbooks/invoice-to-bill.js";
-import type { InvoiceExtraction } from "../gemini/types.js";
-import type { SyncStatus } from "./review-flags.js";
+} from "../quickbooks/api";
+import { convertInvoiceToBill, canConvertToBill } from "../quickbooks/invoice-to-bill";
+import type { InvoiceExtraction } from "../gemini/types";
+import type { SyncStatus } from "./review-flags";
 
 /**
  * Result of a sync operation

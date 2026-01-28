@@ -1,11 +1,11 @@
-export { getSupabase } from "./client.js";
+export { getSupabase } from "./client";
 export {
   saveDocument,
   getDocumentByHash,
   getDocumentsByStatus,
   getAuditLogs,
   updateDocumentDriveInfo,
-} from "./documents.js";
+} from "./documents";
 export type {
   DocumentRecord,
   DocumentStatus,
@@ -13,4 +13,4 @@ export type {
   AuditAction,
   SaveDocumentResult,
   SaveDocumentInput,
-} from "./types.js";
+} from "./types";

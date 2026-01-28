@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { syncDocument } from "../../../../lib/workflow/sync-to-quickbooks.js";
-import { getDocumentById } from "../../../../lib/supabase/documents.js";
-import { convertInvoiceToBill, canConvertToBill } from "../../../../lib/quickbooks/invoice-to-bill.js";
-import type { InvoiceExtraction } from "../../../../lib/gemini/types.js";
+import { syncDocument } from "@/lib/workflow/sync-to-quickbooks";
+import { getDocumentById } from "@/lib/supabase/documents";
+import { convertInvoiceToBill, canConvertToBill } from "@/lib/quickbooks/invoice-to-bill";
+import type { InvoiceExtraction } from "@/lib/gemini/types";
 
 /**
  * POST /api/documents/sync

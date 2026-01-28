@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeCodeForTokens } from "../../../../lib/quickbooks/auth.js";
-import { saveTokens } from "../../../../lib/quickbooks/token-store.js";
+import { exchangeCodeForTokens } from "@/lib/quickbooks/auth";
+import { saveTokens } from "@/lib/quickbooks/token-store";
 
 /**
  * GET /api/quickbooks/callback

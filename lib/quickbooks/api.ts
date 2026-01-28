@@ -1,6 +1,6 @@
-import { getQBConfig, QB_API_BASE_URL } from "./config.js";
-import { getTokens, saveTokens } from "./token-store.js";
-import { refreshTokens, isTokenExpired, type QBTokens } from "./auth.js";
+import { getQBConfig, QB_API_BASE_URL } from "./config";
+import { getTokens, saveTokens } from "./token-store";
+import { refreshTokens, isTokenExpired, type QBTokens } from "./auth";
 import type {
   QBCompanyInfo,
   QBVendor,
@@ -10,7 +10,7 @@ import type {
   QBResponse,
   QBQueryResponse,
   QBApiError,
-} from "./types.js";
+} from "./types";
 
 /**
  * Get valid access token, refreshing if necessary

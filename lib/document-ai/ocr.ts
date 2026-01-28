@@ -6,7 +6,7 @@ import type {
   DetectedTable,
   TableRow,
   TableCell,
-} from "./types.js";
+} from "./types";
 
 type IDocument = google.cloud.documentai.v1.IDocument;
 type IPage = google.cloud.documentai.v1.Document.IPage;

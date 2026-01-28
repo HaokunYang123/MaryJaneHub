@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDocumentById } from "../../../../lib/supabase/documents.js";
+import { getDocumentById } from "@/lib/supabase/documents";
 
 /**
  * GET /api/documents/[id]

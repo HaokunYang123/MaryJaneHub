@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabase } from "../../../lib/supabase/client.js";
-import type { SyncStatus } from "../../../lib/workflow/review-flags.js";
-import type { DocumentType } from "../../../lib/gemini/document-types.js";
+import { getSupabase } from "@/lib/supabase/client";
+import type { SyncStatus } from "@/lib/workflow/review-flags";
+import type { DocumentType } from "@/lib/gemini/document-types";
 
 /**
  * GET /api/documents

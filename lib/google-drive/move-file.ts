@@ -1,5 +1,5 @@
-import { getDriveClient } from "./client.js";
-import type { MoveResult } from "./types.js";
+import { getDriveClient } from "./client";
+import type { MoveResult } from "./types";
 
 /**
  * Move and rename a file in Google Drive

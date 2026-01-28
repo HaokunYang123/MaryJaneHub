@@ -1,5 +1,5 @@
 import { Storage } from "@google-cloud/storage";
-import type { GCSUploadResult } from "./types.js";
+import type { GCSUploadResult } from "./types";
 
 /**
  * Get the GCS bucket name from environment
