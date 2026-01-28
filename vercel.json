@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/process-inbox",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}
