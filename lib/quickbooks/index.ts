@@ -20,3 +20,35 @@ export {
   isConnected,
 } from "./token-store.js";
 export type { QBTokenRecord } from "./token-store.js";
+
+// API Client
+export {
+  getCompanyInfo,
+  getVendors,
+  findVendorByName,
+  findVendorByExactName,
+  createVendor,
+  findOrCreateVendor,
+  createBill,
+  getBill,
+  getExpenseAccounts,
+} from "./api.js";
+
+// Types
+export type {
+  QBRef,
+  QBVendor,
+  QBVendorInput,
+  QBBill,
+  QBBillInput,
+  QBBillLine,
+  QBCompanyInfo,
+  QBAccountBasedExpenseLineDetail,
+} from "./types.js";
+
+// Invoice to Bill Conversion
+export {
+  convertInvoiceToBill,
+  canConvertToBill,
+  calculateLineItemsTotal,
+} from "./invoice-to-bill.js";

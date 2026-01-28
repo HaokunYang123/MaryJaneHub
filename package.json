@@ -12,7 +12,8 @@
     "workflow": "npx tsx scripts/test-full-workflow.ts",
     "poll": "npx tsx scripts/poll-inbox.ts",
     "test:classifier": "npx tsx scripts/test-classifier.ts",
-    "test:extractors": "npx tsx scripts/test-all-extractors.ts"
+    "test:extractors": "npx tsx scripts/test-all-extractors.ts",
+    "qb:api": "npx tsx scripts/test-qb-api.ts"
   },
   "dependencies": {
     "@google-cloud/documentai": "^8.12.0",
