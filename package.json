@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "test:ocr": "npx tsx scripts/test-document-ai.ts",
     "test:gemini": "npx tsx scripts/test-gemini-extraction.ts",
     "test:gcs": "npx tsx scripts/test-gcs-upload.ts",
@@ -24,10 +27,15 @@
     "dotenv": "^17.2.3",
     "googleapis": "^170.1.0",
     "intuit-oauth": "^4.2.2",
+    "next": "^16.1.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/react": "^19.2.10",
+    "@types/react-dom": "^19.2.3",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
   }
