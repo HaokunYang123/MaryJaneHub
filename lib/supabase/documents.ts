@@ -5,6 +5,7 @@ import type {
   SaveDocumentInput,
   DocumentStatus,
 } from "./types.js";
+import type { SyncStatus } from "../workflow/review-flags.js";
 
 /**
  * Save a processed document to Supabase
@@ -56,6 +57,10 @@ export async function saveDocument(
         extraction: doc.extraction as unknown as Record<string, unknown>,
         extraction_confidence: doc.extraction.data.confidence,
         status: "draft",
+        // Sync workflow fields
+        sync_status: doc.syncStatus || "not_applicable",
+        confidence_score: doc.confidenceScore ?? doc.extraction.data.confidence,
+        review_flags: doc.reviewFlags || [],
       })
       .select("id")
       .single<{ id: string }>();
@@ -231,4 +236,122 @@ export async function updateDocumentDriveInfo(
     console.warn(`Failed to update document drive info: ${errorMessage}`);
     return false;
   }
+}
+
+/**
+ * Get documents by sync status
+ */
+export async function getDocumentsBySyncStatus(
+  syncStatus: SyncStatus
+): Promise<DocumentRecord[]> {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*")
+    .eq("sync_status", syncStatus)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to fetch documents: ${error.message}`);
+  }
+
+  return (data || []) as DocumentRecord[];
+}
+
+/**
+ * Get documents needing review (pending_review + needs_attention)
+ */
+export async function getDocumentsNeedingReview(): Promise<DocumentRecord[]> {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*")
+    .in("sync_status", ["pending_review", "needs_attention"])
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to fetch documents: ${error.message}`);
+  }
+
+  return (data || []) as DocumentRecord[];
+}
+
+/**
+ * Get documents ready to sync (approved + auto_approved)
+ */
+export async function getReadyToSync(): Promise<DocumentRecord[]> {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*")
+    .in("sync_status", ["approved", "auto_approved"])
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to fetch documents: ${error.message}`);
+  }
+
+  return (data || []) as DocumentRecord[];
+}
+
+/**
+ * Get document by ID
+ */
+export async function getDocumentById(
+  documentId: string
+): Promise<DocumentRecord | null> {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*")
+    .eq("id", documentId)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") {
+      return null; // Not found
+    }
+    throw new Error(`Failed to fetch document: ${error.message}`);
+  }
+
+  return data as DocumentRecord;
+}
+
+/**
+ * Get sync status summary (counts by status)
+ */
+export async function getSyncStatusSummary(): Promise<Record<SyncStatus, number>> {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from("documents")
+    .select("sync_status");
+
+  if (error) {
+    throw new Error(`Failed to fetch sync status summary: ${error.message}`);
+  }
+
+  const summary: Record<string, number> = {
+    not_applicable: 0,
+    auto_approved: 0,
+    pending_review: 0,
+    needs_attention: 0,
+    approved: 0,
+    rejected: 0,
+    synced: 0,
+    error: 0,
+  };
+
+  for (const doc of data || []) {
+    const status = doc.sync_status as SyncStatus;
+    if (status in summary) {
+      summary[status]++;
+    }
+  }
+
+  return summary as Record<SyncStatus, number>;
 }

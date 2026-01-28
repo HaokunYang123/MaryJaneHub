@@ -1,5 +1,6 @@
 import type { DocumentType } from "../gemini/document-types.js";
 import type { DocumentExtraction } from "../gemini/extract-document.js";
+import type { SyncStatus, ReviewFlag } from "../workflow/review-flags.js";
 
 /**
  * Document status in the workflow
@@ -24,7 +25,17 @@ export interface DocumentRecord {
   extraction_confidence: number | null;
   human_overrides: Record<string, unknown> | null;
   status: DocumentStatus;
+  // Sync workflow fields
+  sync_status: SyncStatus;
+  confidence_score: number | null;
+  review_flags: ReviewFlag[];
   qb_bill_id: string | null;
+  qb_vendor_id: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  synced_at: string | null;
+  sync_error: string | null;
+  // Timestamps
   created_at: string;
   updated_at: string;
   approved_at: string | null;
@@ -73,4 +84,8 @@ export interface SaveDocumentInput {
   extraction: DocumentExtraction;
   documentType?: DocumentType;
   classificationConfidence?: number;
+  // Sync workflow fields
+  syncStatus?: SyncStatus;
+  confidenceScore?: number;
+  reviewFlags?: ReviewFlag[];
 }

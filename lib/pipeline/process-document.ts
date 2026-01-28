@@ -4,6 +4,7 @@ import { classifyDocument } from "../gemini/classify-document.js";
 import { extractDocument, type DocumentExtraction } from "../gemini/extract-document.js";
 import { uploadToGCS } from "../gcs/upload.js";
 import { saveDocument } from "../supabase/documents.js";
+import { analyzeDocument, type SyncStatus, type ReviewFlag } from "../workflow/review-flags.js";
 import type { ProcessedDocument } from "./types.js";
 import type { DocumentType } from "../gemini/document-types.js";
 
@@ -225,7 +226,24 @@ export async function processDocument(
     };
   }
 
-  // Step 4: Upload to GCS for archival (non-blocking on failure)
+  // Step 4: Analyze document for review workflow (invoices only)
+  let syncStatus: SyncStatus = "not_applicable";
+  let reviewFlags: ReviewFlag[] = [];
+  let confidenceScore = extraction.data.confidence;
+
+  if (documentType === "invoice" || documentType === "other") {
+    const analysis = analyzeDocument(extraction);
+    syncStatus = analysis.suggestedStatus;
+    reviewFlags = analysis.flags;
+    confidenceScore = analysis.confidenceScore;
+
+    console.log(`  Sync Status: ${syncStatus}`);
+    if (reviewFlags.length > 0) {
+      console.log(`  Review Flags: ${reviewFlags.join(", ")}`);
+    }
+  }
+
+  // Step 5: Upload to GCS for archival (non-blocking on failure)
   let gcsPath: string | undefined;
   try {
     const gcsResult = await uploadToGCS(fileBuffer, fileName, fileHash, mimeType);
@@ -239,7 +257,7 @@ export async function processDocument(
     console.warn(`GCS upload warning: ${errorMessage}`);
   }
 
-  // Step 5: Save to Supabase (non-blocking on failure)
+  // Step 6: Save to Supabase (non-blocking on failure)
   let documentId: string | undefined;
   try {
     const saveResult = await saveDocument({
@@ -252,6 +270,9 @@ export async function processDocument(
       extraction,
       documentType,
       classificationConfidence,
+      syncStatus,
+      confidenceScore,
+      reviewFlags,
     });
     if (saveResult.success) {
       documentId = saveResult.documentId;
@@ -277,6 +298,8 @@ export async function processDocument(
     extraction,
     gcsPath,
     documentId,
+    syncStatus,
+    reviewFlags,
     status: "success",
   };
 }

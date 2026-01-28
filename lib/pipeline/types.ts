@@ -1,6 +1,7 @@
 import type { InvoiceExtraction } from "../gemini/types.js";
 import type { DocumentType } from "../gemini/document-types.js";
 import type { DocumentExtraction } from "../gemini/extract-document.js";
+import type { SyncStatus, ReviewFlag } from "../workflow/review-flags.js";
 
 /**
  * Status of document processing
@@ -33,10 +34,14 @@ export interface ProcessedDocument {
   // Database layer
   documentId?: string; // Supabase document ID if saved successfully
 
+  // Sync workflow
+  syncStatus?: SyncStatus;
+  reviewFlags?: ReviewFlag[];
+
   // Status
   status: ProcessingStatus;
   error?: string;
 }
 
 // Re-export for convenience
-export type { InvoiceExtraction, DocumentType, DocumentExtraction };
+export type { InvoiceExtraction, DocumentType, DocumentExtraction, SyncStatus, ReviewFlag };
