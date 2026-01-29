@@ -15,12 +15,12 @@ import {
   createJobs,
 } from "./job-manager";
 import type { ProcessingJob, ProcessingStep, CreateJobInput } from "./types";
-import { downloadFile } from "@/lib/google-drive/download";
-import { processDocument } from "@/lib/pipeline/process-document";
-import { moveAndRenameFile } from "@/lib/google-drive/move-file";
-import { updateDocumentDriveInfo } from "@/lib/supabase/documents";
-import { generateCleanFilename } from "@/lib/utils/filename";
-import { listNewFiles } from "@/lib/google-drive/list-files";
+import { downloadFile } from "../google-drive/download";
+import { processDocument } from "../pipeline/process-document";
+import { moveAndRenameFile } from "../google-drive/move-file";
+import { updateDocumentDriveInfo } from "../supabase/documents";
+import { generateCleanFilename } from "../utils/filename";
+import { listNewFiles } from "../google-drive/list-files";
 
 const LOG_PREFIX = "[Worker]";
 

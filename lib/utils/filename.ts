@@ -110,11 +110,17 @@ function getFilenameInfo(extraction: DocumentExtraction): {
       };
     }
     case "receipt": {
-      const d = extraction.data;
+      const d = extraction.data as {
+        merchant_name?: string | null;
+        vendor?: string | null; // Fallback for reclassified invoices
+        date?: string | null;
+        invoice_date?: string | null; // Fallback for reclassified invoices
+        total?: number | null;
+      };
       return {
-        name: d.merchant_name,
-        date: d.date,
-        amount: d.total,
+        name: d.merchant_name || d.vendor || null,
+        date: d.date || d.invoice_date || null,
+        amount: d.total ?? null,
         extraInfo: null,
       };
     }

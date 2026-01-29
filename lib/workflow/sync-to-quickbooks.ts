@@ -119,14 +119,14 @@ export async function syncDocument(
     let vendorName = invoiceData.vendor || "Unknown Vendor";
 
     if (!vendorId) {
-      console.log(`Finding/creating vendor: ${vendorName}`);
+      console.log(`[QB] Finding/creating vendor: ${vendorName}`);
       const vendor = await findOrCreateVendor({ displayName: vendorName });
       vendorId = vendor.Id;
       vendorName = vendor.DisplayName;
     }
 
     // Convert to bill and create
-    console.log(`Creating bill for document ${documentId}`);
+    console.log(`[QB] Creating bill for document ${documentId}`);
     const billInput = convertInvoiceToBill(invoiceData, vendorId, vendorName, accountId);
     const bill = await createBill(billInput);
 

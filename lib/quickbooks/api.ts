@@ -24,7 +24,7 @@ async function getValidToken(): Promise<QBTokens> {
 
   // Refresh if expired or about to expire
   if (isTokenExpired(tokens.expires_at)) {
-    console.log("Access token expired, refreshing...");
+    console.log("[QB] Access token expired, refreshing...");
     const newTokens = await refreshTokens(tokens.refresh_token);
     // Update realm_id from original tokens if not returned
     newTokens.realm_id = newTokens.realm_id || tokens.realm_id;
@@ -62,7 +62,7 @@ async function qbFetch<T>(
 
   // Handle 401 by refreshing token and retrying once
   if (response.status === 401 && retryCount === 0) {
-    console.log("Received 401, refreshing token and retrying...");
+    console.log("[QB] Received 401, refreshing token and retrying...");
     const newTokens = await refreshTokens(tokens.refresh_token);
     newTokens.realm_id = newTokens.realm_id || tokens.realm_id;
     await saveTokens(newTokens);

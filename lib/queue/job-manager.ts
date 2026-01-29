@@ -5,7 +5,7 @@
  * Uses PostgreSQL row-level locking for concurrent job claiming.
  */
 
-import { getSupabase } from "@/lib/supabase/client";
+import { getSupabase } from "../supabase/client";
 import type {
   ProcessingJob,
   CreateJobInput,

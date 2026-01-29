@@ -4,7 +4,7 @@
  * Functions for managing the email whitelist
  */
 
-import { getSupabase } from "@/lib/supabase/client";
+import { getSupabase } from "../supabase/client";
 import { UserRole, AUTH_CONFIG } from "./config";
 
 export interface WhitelistEntry {

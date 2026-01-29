@@ -1,9 +1,9 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import type {
   InvoiceExtraction,
   LineItem,
   GeminiInvoiceResponse,
 } from "./types";
+import { getGeminiModel, cleanJsonResponse } from "./client";
 
 const EXTRACTION_PROMPT = `You are an invoice data extraction assistant. Extract structured data from the following invoice text.
 
@@ -66,21 +66,8 @@ function calculateConfidence(data: GeminiInvoiceResponse): number {
 /**
  * Parse and validate the Gemini response into typed structure
  */
-function parseResponse(
-  rawResponse: string
-): GeminiInvoiceResponse {
-  // Clean up response - remove markdown code blocks if present
-  let cleaned = rawResponse.trim();
-  if (cleaned.startsWith("```json")) {
-    cleaned = cleaned.slice(7);
-  } else if (cleaned.startsWith("```")) {
-    cleaned = cleaned.slice(3);
-  }
-  if (cleaned.endsWith("```")) {
-    cleaned = cleaned.slice(0, -3);
-  }
-  cleaned = cleaned.trim();
-
+function parseResponse(rawResponse: string): GeminiInvoiceResponse {
+  const cleaned = cleanJsonResponse(rawResponse);
   return JSON.parse(cleaned) as GeminiInvoiceResponse;
 }
 
@@ -111,14 +98,7 @@ function normalizeLineItems(
 export async function extractInvoiceWithGemini(
   rawText: string
 ): Promise<InvoiceExtraction> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY environment variable is required");
-  }
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
+  const model = getGeminiModel();
   const prompt = EXTRACTION_PROMPT + rawText;
 
   const result = await model.generateContent(prompt);

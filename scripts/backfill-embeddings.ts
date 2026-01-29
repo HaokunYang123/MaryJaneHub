@@ -25,7 +25,9 @@ function sleep(ms: number): Promise<void> {
 interface DocumentToProcess {
   id: string;
   file_name: string;
+  document_type: string;
   raw_text: string;
+  extraction: Record<string, unknown>;
 }
 
 async function getDocumentsWithoutEmbeddings(): Promise<DocumentToProcess[]> {
@@ -33,7 +35,7 @@ async function getDocumentsWithoutEmbeddings(): Promise<DocumentToProcess[]> {
 
   const { data, error } = await supabase
     .from("documents")
-    .select("id, file_name, raw_text")
+    .select("id, file_name, document_type, raw_text, extraction")
     .is("embedding", null)
     .not("raw_text", "is", null)
     .order("created_at", { ascending: true });
@@ -54,7 +56,11 @@ async function processDocument(doc: DocumentToProcess): Promise<{
     return { success: false, error: "Empty raw_text" };
   }
 
-  return generateAndStoreEmbedding(doc.id, doc.raw_text);
+  return generateAndStoreEmbedding(doc.id, {
+    document_type: doc.document_type,
+    raw_text: doc.raw_text,
+    extraction: doc.extraction,
+  });
 }
 
 async function main() {

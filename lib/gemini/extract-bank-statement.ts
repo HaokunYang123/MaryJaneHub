@@ -1,5 +1,5 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
+import { getGeminiModel, cleanJsonResponse } from "./client";
 
 // Zod schemas
 const TransactionSchema = z.object({
@@ -86,30 +86,13 @@ function calculateConfidence(data: z.infer<typeof BankStatementResponseSchema>):
 }
 
 function parseResponse(rawResponse: string): z.infer<typeof BankStatementResponseSchema> {
-  let cleaned = rawResponse.trim();
-  if (cleaned.startsWith("```json")) {
-    cleaned = cleaned.slice(7);
-  } else if (cleaned.startsWith("```")) {
-    cleaned = cleaned.slice(3);
-  }
-  if (cleaned.endsWith("```")) {
-    cleaned = cleaned.slice(0, -3);
-  }
-  cleaned = cleaned.trim();
-
+  const cleaned = cleanJsonResponse(rawResponse);
   const parsed = JSON.parse(cleaned);
   return BankStatementResponseSchema.parse(parsed);
 }
 
 export async function extractBankStatement(rawText: string): Promise<BankStatementExtraction> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY environment variable is required");
-  }
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
+  const model = getGeminiModel();
   const prompt = EXTRACTION_PROMPT + rawText;
   const result = await model.generateContent(prompt);
   const response = result.response;
