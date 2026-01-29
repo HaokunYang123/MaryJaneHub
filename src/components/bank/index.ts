@@ -1,0 +1,1 @@
+export { PlaidLinkButton } from './PlaidLinkButton';
