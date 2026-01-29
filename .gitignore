@@ -6,3 +6,4 @@ dist/
 .env.local
 
 google-credentials.json
+benchmark-results.json

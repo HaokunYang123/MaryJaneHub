@@ -20,12 +20,17 @@
     "test:full": "npx tsx scripts/test-full-pipeline.ts",
     "embeddings:backfill": "npx tsx scripts/backfill-embeddings.ts",
     "test:search": "npx tsx scripts/test-semantic-search.ts",
-    "test:search:compare": "npx tsx scripts/compare-search-modes.ts"
+    "test:search:compare": "npx tsx scripts/compare-search-modes.ts",
+    "benchmark": "npx tsx scripts/benchmark-all.ts",
+    "benchmark:quick": "npx tsx scripts/benchmark-all.ts --quick",
+    "debug:search": "npx tsx scripts/debug-search-performance.ts",
+    "add:admin": "npx tsx scripts/add-admin.ts"
   },
   "dependencies": {
     "@google-cloud/documentai": "^8.12.0",
     "@google-cloud/storage": "^7.18.0",
     "@google/generative-ai": "^0.24.1",
+    "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.93.2",
     "dotenv": "^17.2.3",
     "googleapis": "^170.1.0",
