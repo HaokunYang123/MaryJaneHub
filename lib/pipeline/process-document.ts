@@ -145,6 +145,9 @@ function createEmptyExtraction(documentType: DocumentType): DocumentExtraction {
 /**
  * Process a document through the complete OCR and extraction pipeline
  *
+ * Uses graceful degradation: saves as much as possible even when steps fail.
+ * Failed documents are saved with appropriate sync_status for review.
+ *
  * @param fileBuffer - The document file as a Buffer
  * @param mimeType - The MIME type of the document (e.g., 'application/pdf')
  * @param fileName - Original file name for reference
@@ -158,6 +161,10 @@ export async function processDocument(
 ): Promise<ProcessedDocument> {
   const fileHash = generateFileHash(fileBuffer);
   const processedAt = new Date().toISOString();
+
+  // Track errors for recording
+  const processingErrors: string[] = [];
+  let partialFailure = false;
 
   // Step 0: Check for duplicate (by file hash)
   if (!options.skipDuplicateCheck) {
@@ -191,79 +198,82 @@ export async function processDocument(
 
   // Step 1: OCR with Document AI
   const ocrResult = await extractWithDocumentAI(fileBuffer, mimeType);
+  let rawText = "";
+  let ocrConfidence = 0;
 
   if (!ocrResult.success) {
-    return {
-      fileName,
-      fileHash,
-      processedAt,
-      ocrConfidence: 0,
-      rawText: "",
-      documentType: "other",
-      classificationConfidence: 0,
-      extraction: createEmptyExtraction("other"),
-      status: "ocr_failed",
-      error: `OCR failed: ${ocrResult.error.code} - ${ocrResult.error.message}`,
-    };
+    const ocrError = `OCR failed: ${ocrResult.error.code} - ${ocrResult.error.message}`;
+    processingErrors.push(ocrError);
+    console.warn(`  ${ocrError}`);
+    partialFailure = true;
+    // Continue - we'll save what we can
+  } else {
+    rawText = ocrResult.rawText;
+    ocrConfidence = ocrResult.confidence;
   }
 
-  // Step 2: Classify document type
+  // Step 2: Classify document type (only if OCR succeeded)
   let documentType: DocumentType = "other";
   let classificationConfidence = 0;
-  try {
-    const classification = await classifyDocument(ocrResult.rawText);
-    documentType = classification.documentType;
-    classificationConfidence = classification.confidence;
-    console.log(`  Classification: ${documentType} (${(classificationConfidence * 100).toFixed(0)}% confidence)`);
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : "Unknown error";
-    console.warn(`Classification warning: ${errorMessage}`);
+
+  if (rawText) {
+    try {
+      const classification = await classifyDocument(rawText);
+      documentType = classification.documentType;
+      classificationConfidence = classification.confidence;
+      console.log(`  Classification: ${documentType} (${(classificationConfidence * 100).toFixed(0)}% confidence)`);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      processingErrors.push(`Classification failed: ${errorMessage}`);
+      console.warn(`  Classification warning: ${errorMessage}`);
+      // Continue with 'other' type
+    }
   }
 
-  // Step 3: Extract structured data with Gemini (type-specific)
-  let extraction: DocumentExtraction;
-  try {
-    extraction = await extractDocument(documentType, ocrResult.rawText);
-    console.log(`  Extraction: ${extraction.type} (${(extraction.data.confidence * 100).toFixed(0)}% confidence)`);
-  } catch (err) {
-    const errorMessage =
-      err instanceof Error ? err.message : "Unknown extraction error";
-    return {
-      fileName,
-      fileHash,
-      processedAt,
-      ocrConfidence: ocrResult.confidence,
-      rawText: ocrResult.rawText,
-      documentType,
-      classificationConfidence,
-      extraction: createEmptyExtraction(documentType),
-      status: "extraction_failed",
-      error: `Extraction failed: ${errorMessage}`,
-    };
+  // Step 3: Extract structured data with Gemini (only if we have text)
+  let extraction: DocumentExtraction = createEmptyExtraction(documentType);
+  let extractionFailed = false;
+
+  if (rawText) {
+    try {
+      extraction = await extractDocument(documentType, rawText);
+      console.log(`  Extraction: ${extraction.type} (${(extraction.data.confidence * 100).toFixed(0)}% confidence)`);
+
+      // Check if extraction produced meaningful results
+      if (extraction.data.confidence === 0) {
+        processingErrors.push("Extraction produced no valid data");
+        extractionFailed = true;
+        partialFailure = true;
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown extraction error";
+      processingErrors.push(`Extraction failed: ${errorMessage}`);
+      console.warn(`  Extraction failed: ${errorMessage}`);
+      extractionFailed = true;
+      partialFailure = true;
+      // Keep empty extraction - we'll still save
+    }
+  } else {
+    extractionFailed = true;
+    partialFailure = true;
   }
 
-  // Check if extraction actually produced meaningful results
-  if (extraction.data.confidence === 0) {
-    return {
-      fileName,
-      fileHash,
-      processedAt,
-      ocrConfidence: ocrResult.confidence,
-      rawText: ocrResult.rawText,
-      documentType,
-      classificationConfidence,
-      extraction,
-      status: "extraction_failed",
-      error: "Extraction produced no valid data",
-    };
-  }
-
-  // Step 4: Analyze document for review workflow (invoices only)
+  // Step 4: Analyze document for review workflow
+  // Determine sync status based on what succeeded/failed
   let syncStatus: SyncStatus = "not_applicable";
   let reviewFlags: ReviewFlag[] = [];
   let confidenceScore = extraction.data.confidence;
 
-  if (documentType === "invoice" || documentType === "other") {
+  if (!rawText) {
+    // OCR failed completely
+    syncStatus = "ocr_failed";
+    reviewFlags.push("low_confidence");
+  } else if (extractionFailed) {
+    // OCR worked but extraction failed
+    syncStatus = "extraction_failed";
+    reviewFlags.push("low_confidence");
+  } else if (documentType === "invoice" || documentType === "other") {
+    // Normal workflow for invoices
     const analysis = analyzeDocument(extraction);
     syncStatus = analysis.suggestedStatus;
     reviewFlags = analysis.flags;
@@ -289,7 +299,7 @@ export async function processDocument(
     console.warn(`GCS upload warning: ${errorMessage}`);
   }
 
-  // Step 6: Save to Supabase (non-blocking on failure)
+  // Step 6: Save to Supabase - ALWAYS save, even on partial failure
   let documentId: string | undefined;
   try {
     const saveResult = await saveDocument({
@@ -297,8 +307,8 @@ export async function processDocument(
       fileHash,
       mimeType,
       gcsPath,
-      ocrConfidence: ocrResult.confidence,
-      rawText: ocrResult.rawText,
+      ocrConfidence,
+      rawText,
       extraction,
       documentType,
       classificationConfidence,
@@ -319,10 +329,14 @@ export async function processDocument(
     console.warn(`Supabase save warning: ${errorMessage}`);
   }
 
-  // Step 7: Generate embedding for semantic search (non-blocking on failure)
-  if (!options.skipEmbedding && documentId && ocrResult.rawText) {
+  // Step 7: Generate embedding for semantic search (only if we have text)
+  if (!options.skipEmbedding && documentId && rawText) {
     try {
-      const embeddingResult = await generateAndStoreEmbedding(documentId, ocrResult.rawText);
+      const embeddingResult = await generateAndStoreEmbedding(documentId, {
+        document_type: documentType,
+        raw_text: rawText,
+        extraction,
+      });
       if (embeddingResult.success) {
         console.log(`  Embedding generated (${embeddingResult.processingTimeMs}ms)`);
       } else {
@@ -334,12 +348,24 @@ export async function processDocument(
     }
   }
 
+  // Determine final status
+  let finalStatus: "success" | "partial_success" | "ocr_failed" | "extraction_failed" | "duplicate";
+  if (!rawText) {
+    finalStatus = "ocr_failed";
+  } else if (extractionFailed) {
+    finalStatus = "extraction_failed";
+  } else if (partialFailure) {
+    finalStatus = "partial_success";
+  } else {
+    finalStatus = "success";
+  }
+
   return {
     fileName,
     fileHash,
     processedAt,
-    ocrConfidence: ocrResult.confidence,
-    rawText: ocrResult.rawText,
+    ocrConfidence,
+    rawText,
     documentType,
     classificationConfidence,
     extraction,
@@ -347,6 +373,7 @@ export async function processDocument(
     documentId,
     syncStatus,
     reviewFlags,
-    status: "success",
+    status: finalStatus,
+    error: processingErrors.length > 0 ? processingErrors.join("; ") : undefined,
   };
 }

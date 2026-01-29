@@ -7,11 +7,13 @@ import { SUPPORTED_MIME_TYPES } from "./types";
  *
  * @param folderId - The Google Drive folder ID
  * @param onlySupportedTypes - If true, only return PDF and image files
+ * @param maxFiles - Maximum number of files to return (default: 1000)
  * @returns Promise resolving to array of DriveFile
  */
 export async function listNewFiles(
   folderId: string,
-  onlySupportedTypes = true
+  onlySupportedTypes = true,
+  maxFiles = 1000
 ): Promise<DriveFile[]> {
   const drive = getDriveClient();
 
@@ -26,22 +28,41 @@ export async function listNewFiles(
     query += ` and (${mimeTypeFilters})`;
   }
 
-  const response = await drive.files.list({
-    q: query,
-    fields: "files(id, name, mimeType, createdTime, size)",
-    orderBy: "createdTime asc", // Oldest first for FIFO processing
-    pageSize: 100,
-  });
+  const allFiles: DriveFile[] = [];
+  let pageToken: string | undefined;
 
-  const files = response.data.files || [];
+  // Paginate through all results
+  do {
+    const response = await drive.files.list({
+      q: query,
+      fields: "nextPageToken, files(id, name, mimeType, createdTime, size)",
+      orderBy: "createdTime asc", // Oldest first for FIFO processing
+      pageSize: 100, // Max per page
+      pageToken,
+    });
 
-  return files.map((file) => ({
-    id: file.id || "",
-    name: file.name || "",
-    mimeType: file.mimeType || "",
-    createdTime: file.createdTime || "",
-    size: file.size || undefined,
-  }));
+    const files = response.data.files || [];
+
+    for (const file of files) {
+      allFiles.push({
+        id: file.id || "",
+        name: file.name || "",
+        mimeType: file.mimeType || "",
+        createdTime: file.createdTime || "",
+        size: file.size || undefined,
+      });
+
+      // Stop if we've reached the max
+      if (allFiles.length >= maxFiles) {
+        console.log(`[Drive] Reached max files limit (${maxFiles}), stopping pagination`);
+        return allFiles;
+      }
+    }
+
+    pageToken = response.data.nextPageToken || undefined;
+  } while (pageToken);
+
+  return allFiles;
 }
 
 /**

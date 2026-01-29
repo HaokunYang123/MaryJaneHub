@@ -5,6 +5,8 @@
  * Output dimension: 768
  */
 
+import type { DocumentExtraction } from "./extract-document";
+
 const EMBEDDING_MODEL = "gemini-embedding-001";
 const EMBEDDING_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:embedContent`;
 const OUTPUT_DIMENSIONALITY = 768;
@@ -177,4 +179,161 @@ export async function generateEmbeddingsBatch(
   }
 
   return results;
+}
+
+/**
+ * Generate rich embedding text from document data
+ *
+ * Combines structured extraction data with raw text for better semantic search.
+ * Structured fields are prepended to help the embedding capture key entities.
+ *
+ * @param document - Document with type, raw_text, and extraction
+ * @returns Enriched text optimized for embedding generation
+ */
+export function generateEmbeddingText(document: {
+  document_type: string;
+  raw_text: string | null;
+  extraction: DocumentExtraction | Record<string, unknown>;
+}): string {
+  const parts: string[] = [];
+  const extraction = document.extraction as DocumentExtraction;
+  const data = extraction?.data || {};
+
+  // Document type label
+  const typeLabels: Record<string, string> = {
+    invoice: "Invoice",
+    receipt: "Receipt",
+    bank_statement: "Bank Statement",
+    contract: "Contract",
+    tax_form: "Tax Form",
+    correspondence: "Correspondence",
+    other: "Document",
+  };
+  parts.push(`Type: ${typeLabels[document.document_type] || "Document"}`);
+
+  // Type-specific structured fields
+  switch (document.document_type) {
+    case "invoice": {
+      const d = data as {
+        vendor?: string | null;
+        invoice_date?: string | null;
+        total?: number | null;
+        line_items?: Array<{ description?: string }>;
+      };
+      if (d.vendor) parts.push(`Vendor: ${d.vendor}`);
+      if (d.invoice_date) parts.push(`Date: ${d.invoice_date}`);
+      if (d.total != null) parts.push(`Total: $${d.total.toFixed(2)}`);
+      if (d.line_items?.length) {
+        const items = d.line_items
+          .slice(0, 10)
+          .map((i) => i.description)
+          .filter(Boolean)
+          .join(", ");
+        if (items) parts.push(`Items: ${items}`);
+      }
+      break;
+    }
+
+    case "receipt": {
+      const d = data as {
+        merchant_name?: string | null;
+        date?: string | null;
+        total?: number | null;
+        items?: Array<{ description?: string }>;
+      };
+      if (d.merchant_name) parts.push(`Merchant: ${d.merchant_name}`);
+      if (d.date) parts.push(`Date: ${d.date}`);
+      if (d.total != null) parts.push(`Total: $${d.total.toFixed(2)}`);
+      if (d.items?.length) {
+        const items = d.items
+          .slice(0, 10)
+          .map((i) => i.description)
+          .filter(Boolean)
+          .join(", ");
+        if (items) parts.push(`Items: ${items}`);
+      }
+      break;
+    }
+
+    case "bank_statement": {
+      const d = data as {
+        bank_name?: string | null;
+        statement_period_start?: string | null;
+        statement_period_end?: string | null;
+        closing_balance?: number | null;
+      };
+      if (d.bank_name) parts.push(`Bank: ${d.bank_name}`);
+      if (d.statement_period_start && d.statement_period_end) {
+        parts.push(`Period: ${d.statement_period_start} to ${d.statement_period_end}`);
+      }
+      if (d.closing_balance != null) parts.push(`Balance: $${d.closing_balance.toFixed(2)}`);
+      break;
+    }
+
+    case "contract": {
+      const d = data as {
+        contract_type?: string | null;
+        parties?: Array<{ name?: string }>;
+        effective_date?: string | null;
+        value?: number | null;
+      };
+      if (d.contract_type) parts.push(`Contract Type: ${d.contract_type}`);
+      if (d.parties?.length) {
+        const partyNames = d.parties.map((p) => p.name).filter(Boolean);
+        if (partyNames.length) parts.push(`Parties: ${partyNames.join(", ")}`);
+      }
+      if (d.effective_date) parts.push(`Date: ${d.effective_date}`);
+      if (d.value != null) parts.push(`Value: $${d.value.toFixed(2)}`);
+      break;
+    }
+
+    case "tax_form": {
+      const d = data as {
+        form_type?: string | null;
+        tax_year?: number | null;
+        entity_name?: string | null;
+        total_income?: number | null;
+      };
+      if (d.form_type) parts.push(`Form: ${d.form_type}`);
+      if (d.tax_year) parts.push(`Tax Year: ${d.tax_year}`);
+      if (d.entity_name) parts.push(`Entity: ${d.entity_name}`);
+      if (d.total_income != null) parts.push(`Income: $${d.total_income.toFixed(2)}`);
+      break;
+    }
+
+    case "correspondence": {
+      const d = data as {
+        sender?: string | null;
+        sender_organization?: string | null;
+        date?: string | null;
+        subject?: string | null;
+      };
+      if (d.sender_organization) parts.push(`From: ${d.sender_organization}`);
+      else if (d.sender) parts.push(`From: ${d.sender}`);
+      if (d.date) parts.push(`Date: ${d.date}`);
+      if (d.subject) parts.push(`Subject: ${d.subject}`);
+      break;
+    }
+
+    default: {
+      // Generic fallback for "other" type
+      const d = data as {
+        vendor?: string | null;
+        invoice_date?: string | null;
+        total?: number | null;
+      };
+      if (d.vendor) parts.push(`Vendor: ${d.vendor}`);
+      if (d.invoice_date) parts.push(`Date: ${d.invoice_date}`);
+      if (d.total != null) parts.push(`Total: $${d.total.toFixed(2)}`);
+    }
+  }
+
+  // Add truncated raw text (max 800 chars to balance structure vs content)
+  const rawText = document.raw_text?.trim().slice(0, 800) || "";
+  if (rawText) {
+    parts.push("");
+    parts.push(rawText);
+  }
+
+  return parts.join("\n");
 }

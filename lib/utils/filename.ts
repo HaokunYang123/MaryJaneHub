@@ -1,5 +1,26 @@
 import type { DocumentExtraction } from "../gemini/extract-document";
+import type { DocumentType } from "../gemini/document-types";
 import { extname } from "path";
+
+/**
+ * Document type prefixes for filenames
+ * Makes it easy for lawyers and accountants to identify document types at a glance
+ */
+const TYPE_PREFIX: Record<DocumentType | "unknown", string> = {
+  invoice: "INVOICE",
+  receipt: "RECEIPT",
+  bank_statement: "BANK-STMT",
+  contract: "CONTRACT",
+  tax_form: "TAX-FORM",
+  correspondence: "CORRESPONDENCE",
+  other: "DOC",
+  unknown: "DOC",
+};
+
+/**
+ * Document types that typically don't have monetary amounts
+ */
+const NON_FINANCIAL_TYPES: DocumentType[] = ["contract", "correspondence", "tax_form"];
 
 /**
  * Sanitize a string for use in a filename
@@ -22,24 +43,38 @@ function sanitizeForFilename(str: string, maxLength = 30): string {
  */
 function formatAmountForFilename(amount: number | null | undefined): string {
   if (amount === null || amount === undefined || isNaN(amount)) {
-    return "$0.00";
+    return "";
   }
   return `$${amount.toFixed(2)}`;
 }
 
 /**
  * Get date string in YYYY-MM-DD format
+ * Returns null if no valid date found (caller decides how to handle)
  */
-function getDateString(dateStr: string | null | undefined): string {
+function getDateString(dateStr: string | null | undefined): string | null {
   if (dateStr) {
     // If it's already in ISO format (YYYY-MM-DD), use it
     const match = dateStr.match(/^\d{4}-\d{2}-\d{2}/);
     if (match) {
       return match[0];
     }
+    // Try to parse other date formats
+    const parsed = new Date(dateStr);
+    if (!isNaN(parsed.getTime())) {
+      const year = parsed.getFullYear();
+      const month = String(parsed.getMonth() + 1).padStart(2, "0");
+      const day = String(parsed.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
   }
+  return null;
+}
 
-  // Fall back to today's date
+/**
+ * Get today's date as YYYY-MM-DD
+ */
+function getTodayString(): string {
   const today = new Date();
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, "0");
@@ -62,6 +97,7 @@ function getFilenameInfo(extraction: DocumentExtraction): {
   name: string | null;
   date: string | null;
   amount: number | null;
+  extraInfo: string | null; // For additional context (e.g., period for bank statements)
 } {
   switch (extraction.type) {
     case "invoice": {
@@ -70,6 +106,7 @@ function getFilenameInfo(extraction: DocumentExtraction): {
         name: d.vendor,
         date: d.invoice_date,
         amount: d.total,
+        extraInfo: null,
       };
     }
     case "receipt": {
@@ -78,14 +115,25 @@ function getFilenameInfo(extraction: DocumentExtraction): {
         name: d.merchant_name,
         date: d.date,
         amount: d.total,
+        extraInfo: null,
       };
     }
     case "bank_statement": {
       const d = extraction.data;
+      // Create period info like "Jan2024"
+      let periodInfo: string | null = null;
+      if (d.statement_period_end) {
+        const endDate = new Date(d.statement_period_end);
+        if (!isNaN(endDate.getTime())) {
+          const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+          periodInfo = `${months[endDate.getMonth()]}${endDate.getFullYear()}`;
+        }
+      }
       return {
         name: d.bank_name,
         date: d.statement_period_end,
-        amount: d.closing_balance,
+        amount: null, // Don't show balance in filename
+        extraInfo: periodInfo,
       };
     }
     case "contract": {
@@ -93,15 +141,19 @@ function getFilenameInfo(extraction: DocumentExtraction): {
       return {
         name: d.parties?.[0]?.name || null,
         date: d.effective_date,
-        amount: d.value,
+        amount: null, // Don't show contract value in filename
+        extraInfo: null,
       };
     }
     case "tax_form": {
       const d = extraction.data;
+      // Include form type like "W2" or "1099"
+      const formType = d.form_type ? sanitizeForFilename(d.form_type, 10) : null;
       return {
         name: d.entity_name,
         date: d.tax_year ? `${d.tax_year}-01-01` : null,
-        amount: d.total_income,
+        amount: null, // Don't show income in filename
+        extraInfo: formType,
       };
     }
     case "correspondence": {
@@ -110,6 +162,7 @@ function getFilenameInfo(extraction: DocumentExtraction): {
         name: d.sender_organization || d.sender,
         date: d.date,
         amount: null,
+        extraInfo: null,
       };
     }
     case "other":
@@ -119,6 +172,7 @@ function getFilenameInfo(extraction: DocumentExtraction): {
         name: d.vendor,
         date: d.invoice_date,
         amount: d.total,
+        extraInfo: null,
       };
     }
   }
@@ -127,11 +181,21 @@ function getFilenameInfo(extraction: DocumentExtraction): {
 /**
  * Generate a clean, descriptive filename from document extraction
  *
- * Format: YYYY-MM-DD_Name_$Amount.ext (for financial docs)
- * Format: YYYY-MM-DD_Name_Type.ext (for non-financial docs)
- * Example: 2016-01-25_SlicedInvoices_$93.50.pdf
+ * Format: DATE_TYPE_VENDOR_AMOUNT.ext
  *
- * If extraction failed: YYYY-MM-DD_UNKNOWN_originalname.ext
+ * Examples:
+ * - Receipt:        2019-05-03_RECEIPT_Primo_Family_Restaurant_$52.47.jpg
+ * - Invoice:        2026-01-15_INVOICE_CoolAir_HVAC_Services_$400.00.pdf
+ * - Contract:       2024-03-15_CONTRACT_ABC_Property_LLC.pdf
+ * - Bank Statement: 2024-01-31_BANK-STMT_Chase_Business_Jan2024.pdf
+ * - Tax Form:       2024-02-15_TAX-FORM_W2_Acme_Corp.pdf
+ * - Correspondence: 2024-06-01_CORRESPONDENCE_IRS_Notice.pdf
+ * - Unknown:        2024-06-01_DOC_Unknown_Vendor.pdf
+ *
+ * Edge cases:
+ * - No date: Uses UNDATED prefix
+ * - No vendor: Uses "Unknown_Vendor"
+ * - No amount (for non-financial): Omits amount
  */
 export function generateCleanFilename(
   extraction: DocumentExtraction,
@@ -139,34 +203,34 @@ export function generateCleanFilename(
 ): string {
   const extension = getExtension(originalName);
   const info = getFilenameInfo(extraction);
-  const dateStr = getDateString(info.date);
+  const docType = extraction.type || "other";
 
-  // Check if we have meaningful extraction data
+  // Get type prefix
+  const typePrefix = TYPE_PREFIX[docType as keyof typeof TYPE_PREFIX] || TYPE_PREFIX.unknown;
+
+  // Get date (or UNDATED)
+  const dateStr = getDateString(info.date) || "UNDATED";
+
+  // Get vendor/source name
   const hasName = info.name && info.name.trim().length > 0;
-  const hasAmount = info.amount !== null && !isNaN(info.amount);
+  const name = hasName ? sanitizeForFilename(info.name!) : "Unknown_Vendor";
 
-  if (!hasName && !hasAmount) {
-    // Extraction failed or produced no useful data
-    const sanitizedOriginal = sanitizeForFilename(
-      originalName.replace(/\.[^/.]+$/, ""), // Remove extension
-      40
-    );
-    return `${dateStr}_UNKNOWN_${sanitizedOriginal}${extension}`;
+  // Build filename parts
+  const parts: string[] = [dateStr, typePrefix, name];
+
+  // Add extra info if available (e.g., period for bank statements, form type for tax)
+  if (info.extraInfo) {
+    parts.push(info.extraInfo);
   }
 
-  const name = hasName
-    ? sanitizeForFilename(info.name!)
-    : "Unknown";
-
-  // For documents with amounts, include the amount
-  if (hasAmount) {
-    const amount = formatAmountForFilename(info.amount);
-    return `${dateStr}_${name}_${amount}${extension}`;
+  // Add amount for financial documents (receipts, invoices)
+  const isFinancialDoc = !NON_FINANCIAL_TYPES.includes(docType as DocumentType);
+  if (isFinancialDoc && info.amount !== null && !isNaN(info.amount)) {
+    parts.push(formatAmountForFilename(info.amount));
   }
 
-  // For non-financial documents, include the type
-  const docType = extraction.type.replace(/_/g, "");
-  return `${dateStr}_${name}_${docType}${extension}`;
+  // Join parts and add extension
+  return parts.join("_") + extension;
 }
 
 /**
@@ -193,3 +257,4 @@ export function makeFilenameUnique(
 
   return newName;
 }
+

@@ -6,7 +6,12 @@ import type { SyncStatus, ReviewFlag } from "../workflow/review-flags";
 /**
  * Status of document processing
  */
-export type ProcessingStatus = "success" | "duplicate" | "ocr_failed" | "extraction_failed";
+export type ProcessingStatus =
+  | "success" // All steps completed successfully
+  | "partial_success" // Document saved but with some issues
+  | "duplicate" // Document already exists (by hash)
+  | "ocr_failed" // OCR could not extract text (still saved for review)
+  | "extraction_failed"; // Extraction failed (still saved with raw text)
 
 /**
  * Result of the complete document processing pipeline

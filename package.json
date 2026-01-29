@@ -24,7 +24,18 @@
     "benchmark": "npx tsx scripts/benchmark-all.ts",
     "benchmark:quick": "npx tsx scripts/benchmark-all.ts --quick",
     "debug:search": "npx tsx scripts/debug-search-performance.ts",
-    "add:admin": "npx tsx scripts/add-admin.ts"
+    "add:admin": "npx tsx scripts/add-admin.ts",
+    "test:queue": "npx tsx scripts/test-queue.ts",
+    "db:migrate": "npx tsx scripts/run-migration.ts",
+    "worker": "npx tsx scripts/run-worker.ts",
+    "worker:only": "npx tsx scripts/run-worker.ts worker-only",
+    "worker:retry-failed": "npx tsx scripts/retry-failed-jobs.ts",
+    "rename:dry": "npx tsx scripts/rename-processed-files.ts",
+    "rename:execute": "npx tsx scripts/rename-processed-files.ts --execute",
+    "embeddings:regenerate": "npx tsx scripts/regenerate-embeddings.ts",
+    "export": "npx tsx scripts/export-data.ts",
+    "reclassify": "npx tsx scripts/reclassify-documents.ts",
+    "reclassify:dry": "npx tsx scripts/reclassify-documents.ts --dry-run"
   },
   "dependencies": {
     "@google-cloud/documentai": "^8.12.0",
@@ -33,17 +44,21 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.93.2",
     "dotenv": "^17.2.3",
+    "exceljs": "^4.4.0",
     "googleapis": "^170.1.0",
     "intuit-oauth": "^4.2.2",
     "next": "^16.1.6",
+    "p-limit": "^7.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/pg": "^8.16.0",
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
+    "pg": "^8.17.2",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
   }

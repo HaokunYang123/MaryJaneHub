@@ -6,8 +6,9 @@
  */
 
 import { getSupabase } from "../supabase/client";
-import { generateEmbedding } from "../gemini/embeddings";
+import { generateEmbedding, generateEmbeddingText } from "../gemini/embeddings";
 import type { DocumentType } from "../gemini/document-types";
+import type { DocumentExtraction } from "../gemini/extract-document";
 
 export interface SearchOptions {
   /** Minimum similarity threshold (0-1, default: 0.7) */
@@ -307,18 +308,28 @@ export async function updateDocumentEmbedding(
   }
 }
 
+export interface EmbeddingDocumentInput {
+  document_type: string;
+  raw_text: string | null;
+  extraction: DocumentExtraction | Record<string, unknown>;
+}
+
 /**
  * Generate and store embedding for a document
  *
+ * Uses structured extraction data combined with raw text for better semantic search.
+ *
  * @param documentId - Document ID
- * @param rawText - Raw text to generate embedding from
+ * @param document - Document with type, raw_text, and extraction
  * @returns Promise resolving to success status with processing time
  */
 export async function generateAndStoreEmbedding(
   documentId: string,
-  rawText: string
+  document: EmbeddingDocumentInput
 ): Promise<{ success: boolean; error?: string; processingTimeMs?: number }> {
-  const embeddingResult = await generateEmbedding(rawText);
+  // Generate enriched text combining structured data + raw text
+  const embeddingText = generateEmbeddingText(document);
+  const embeddingResult = await generateEmbedding(embeddingText);
 
   if (!embeddingResult.success) {
     return { success: false, error: embeddingResult.error };

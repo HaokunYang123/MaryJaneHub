@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import { processAllInboxFiles } from "@/lib/workflow/process-inbox";
+import { queueAndProcessInbox } from "@/lib/queue";
 
 /**
  * Vercel Cron endpoint for processing inbox files
  * Called automatically by Vercel Cron based on vercel.json schedule
+ *
+ * Uses parallel processing with configurable concurrency.
  */
 export async function GET(request: Request): Promise<NextResponse> {
   // Verify cron secret for security
@@ -15,19 +17,31 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  console.log(`[${new Date().toISOString()}] Cron job triggered: process-inbox`);
+  console.log(`[${new Date().toISOString()}] Cron job triggered: process-inbox (parallel)`);
 
   try {
-    const result = await processAllInboxFiles();
+    const stats = await queueAndProcessInbox({
+      concurrency: 12, // Process 12 files in parallel
+      batchSize: 15, // Claim 15 jobs per cycle
+      maxRunTime: 55000, // 55 seconds (safe for Vercel 60s timeout)
+    });
 
     console.log(
-      `Cron complete: ${result.processed} processed, ${result.skipped} skipped, ${result.failed} failed`
+      `Cron complete: ${stats.queued} queued, ${stats.processed} processed, ` +
+        `${stats.succeeded} succeeded, ${stats.failed} failed, ${stats.skipped} skipped`
     );
 
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
-      ...result,
+      queued: stats.queued,
+      processed: stats.processed,
+      succeeded: stats.succeeded,
+      failed: stats.failed,
+      skipped: stats.skipped,
+      duration: stats.endTime
+        ? stats.endTime.getTime() - stats.startTime.getTime()
+        : 0,
     });
   } catch (error) {
     const errorMessage =

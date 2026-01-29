@@ -2,33 +2,79 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { ClassificationResult, DocumentType } from "./document-types";
 import { DOCUMENT_TYPE_DESCRIPTIONS, isValidDocumentType } from "./document-types";
 
-const CLASSIFICATION_PROMPT = `You are a document classification assistant. Analyze the following document text and determine its type.
+const CLASSIFICATION_PROMPT = `You are a document classifier for financial documents. Classify the following document into exactly ONE category.
 
-DOCUMENT TYPES:
-${Object.entries(DOCUMENT_TYPE_DESCRIPTIONS)
-  .map(([type, desc]) => `- ${type}: ${desc}`)
-  .join("\n")}
+## Categories and Criteria:
 
-INSTRUCTIONS:
-1. Read the document text carefully
-2. Identify key characteristics (amounts, dates, parties, purpose)
-3. Determine the most likely document type
-4. Provide a confidence score (0.0 to 1.0)
-5. Give a brief reasoning for your classification
+### RECEIPT
+A receipt is PROOF OF COMPLETED PAYMENT. Key indicators:
+- Contains "Thank you", "Thanks for visiting", "Come again"
+- Shows "PAID", "CASH", "CREDIT CARD", "CHANGE DUE", "TIP"
+- Has transaction/register number, server name, table number
+- Printed from POS/cash register system (looks like thermal paper printout)
+- Consumer retail context: restaurants, stores, gas stations, coffee shops
+- Shows subtotal + tax + tip + total as final amounts (NOT amounts due)
+- Date/time of transaction present
+- NO "Due Date", "Payment Terms", "Net 30", or "Amount Due"
+- Restaurant/food establishments are ALMOST ALWAYS receipts
 
-IMPORTANT:
-- Return ONLY valid JSON, no markdown code blocks
-- If the document is unclear or doesn't fit well, use "other" with lower confidence
-- Be precise with the document type - invoices request payment, receipts confirm payment
+### INVOICE
+An invoice is a REQUEST FOR PAYMENT (payment NOT yet made). Key indicators:
+- Contains "Invoice #", "Invoice Number", "Bill To", "Ship To"
+- Shows "Due Date", "Payment Terms", "Net 30", "Net 15"
+- Has "Amount Due", "Balance Due", "Please Pay", "Remit To"
+- Generated from accounting/billing system
+- B2B context: contractors, suppliers, professional services
+- May include payment instructions (bank details, check address)
+- Often has formal letterhead with company logo
+- Customer ID, account number for billing purposes
 
-Return this exact JSON structure:
+### BANK_STATEMENT
+- From a bank or financial institution
+- Shows account number, statement period
+- Lists transactions over a time period
+- Shows beginning/ending balance
+
+### CONTRACT
+- Legal agreement between parties
+- Contains terms, conditions, signatures
+- References obligations and rights
+
+### TAX_FORM
+- Government tax document (W2, 1099, etc.)
+- Contains tax ID numbers, withholding amounts
+- Official form layout
+
+### CORRESPONDENCE
+- Letters, emails, notices
+- General communication not primarily financial
+
+## CRITICAL Rules for Receipt vs Invoice:
+
+1. **Restaurant/Food/Retail = RECEIPT** (unless explicitly unpaid bill)
+   - Any document from: restaurants, cafes, bars, grills, diners, fast food, coffee shops, retail stores → RECEIPT
+   - Keywords: restaurant, cafe, grill, kitchen, diner, pizza, burger, taco, sushi, buffet, tavern, bistro, bar
+
+2. **Payment Method Shown = RECEIPT**
+   - If document shows: CASH, CREDIT, DEBIT, VISA, MASTERCARD, AMEX, CHANGE → RECEIPT
+   - These indicate payment was COMPLETED
+
+3. **No "Due Date" or "Amount Due" = Likely RECEIPT**
+   - Invoices ALWAYS have due dates or amount due
+   - If missing, it's probably a receipt
+
+4. **"Thank You" or "Come Again" = RECEIPT**
+   - These phrases only appear on receipts, never on invoices
+
+## Output Format:
+Respond with JSON only, no markdown:
 {
-  "documentType": "invoice|receipt|bank_statement|contract|tax_form|correspondence|other",
-  "confidence": 0.0 to 1.0,
-  "reasoning": "brief explanation of why this type was chosen"
+  "documentType": "receipt|invoice|bank_statement|contract|tax_form|correspondence|other",
+  "confidence": 0.0-1.0,
+  "reasoning": "Brief explanation of key indicators found"
 }
 
-DOCUMENT TEXT:
+## Document Text:
 `;
 
 /**

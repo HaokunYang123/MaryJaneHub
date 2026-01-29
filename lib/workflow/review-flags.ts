@@ -21,7 +21,9 @@ export type SyncStatus =
   | "approved" // Manually approved, ready to sync
   | "rejected" // Rejected, won't sync
   | "synced" // Successfully synced to QuickBooks
-  | "error"; // Sync failed
+  | "error" // Sync failed
+  | "ocr_failed" // OCR could not extract text
+  | "extraction_failed"; // Extraction could not parse document
 
 /**
  * Result of document analysis
