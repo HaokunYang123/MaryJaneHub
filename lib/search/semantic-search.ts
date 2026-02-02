@@ -6,7 +6,8 @@
  */
 
 import { getSupabase } from "../supabase/client";
-import { generateEmbedding, generateEmbeddingText } from "../gemini/embeddings";
+import { generateEmbedding, generateEmbeddingText, EMBEDDING_MODEL } from "../gemini/embeddings";
+import { createHash } from "crypto";
 import type { DocumentType } from "../gemini/document-types";
 import type { DocumentExtraction } from "../gemini/extract-document";
 
@@ -314,6 +315,66 @@ export interface EmbeddingDocumentInput {
   extraction: DocumentExtraction | Record<string, unknown>;
 }
 
+type EmbeddingDeps = {
+  fetchEmbeddingByKey: (key: string) => Promise<{ embedding: number[] } | null>;
+  generateEmbedding: typeof generateEmbedding;
+  updateDocumentEmbedding: typeof updateDocumentEmbedding;
+  updateEmbeddingCache: (key: string, embedding: number[]) => Promise<void>;
+};
+
+function normalizeEmbeddingText(text: string): string {
+  return text.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function buildEmbeddingKey(text: string): string {
+  const normalized = normalizeEmbeddingText(text);
+  return createHash("sha256").update(`${EMBEDDING_MODEL}:${normalized}`).digest("hex");
+}
+
+async function fetchEmbeddingByKey(
+  key: string
+): Promise<{ embedding: number[] } | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("embedding_cache")
+    .select("embedding")
+    .eq("embedding_key", key)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to fetch embedding cache: ${error.message}`);
+  }
+  if (!data) return null;
+
+  const raw = data.embedding;
+  if (Array.isArray(raw)) {
+    return { embedding: raw as number[] };
+  }
+  if (typeof raw === "string") {
+    const parsed = raw.replace(/[\[\]]/g, "").split(",").map((v) => Number(v.trim()));
+    return { embedding: parsed };
+  }
+
+  return null;
+}
+
+async function updateEmbeddingCache(
+  key: string,
+  embedding: number[]
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("embedding_cache")
+    .insert({
+      embedding_key: key,
+      embedding: `[${embedding.join(",")}]`,
+    });
+
+  if (error && error.code !== "23505") {
+    throw new Error(`Failed to insert embedding cache: ${error.message}`);
+  }
+}
+
 /**
  * Generate and store embedding for a document
  *
@@ -327,18 +388,52 @@ export async function generateAndStoreEmbedding(
   documentId: string,
   document: EmbeddingDocumentInput
 ): Promise<{ success: boolean; error?: string; processingTimeMs?: number }> {
+  return generateAndStoreEmbeddingWithDeps(documentId, document, {
+    fetchEmbeddingByKey,
+    generateEmbedding,
+    updateDocumentEmbedding,
+    updateEmbeddingCache,
+  });
+}
+
+export async function generateAndStoreEmbeddingWithDeps(
+  documentId: string,
+  document: EmbeddingDocumentInput,
+  deps: EmbeddingDeps
+): Promise<{ success: boolean; error?: string; processingTimeMs?: number }> {
   // Generate enriched text combining structured data + raw text
   const embeddingText = generateEmbeddingText(document);
-  const embeddingResult = await generateEmbedding(embeddingText);
+  const embeddingKey = buildEmbeddingKey(embeddingText);
+
+  try {
+    const cached = await deps.fetchEmbeddingByKey(embeddingKey);
+    if (cached?.embedding?.length) {
+      const updateResult = await deps.updateDocumentEmbedding(documentId, cached.embedding);
+      if (!updateResult.success) {
+        return { success: false, error: updateResult.error };
+      }
+      return { success: true };
+    }
+  } catch (error) {
+    console.warn(`Embedding cache lookup warning: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const embeddingResult = await deps.generateEmbedding(embeddingText);
 
   if (!embeddingResult.success) {
     return { success: false, error: embeddingResult.error };
   }
 
-  const updateResult = await updateDocumentEmbedding(documentId, embeddingResult.embedding);
+  const updateResult = await deps.updateDocumentEmbedding(documentId, embeddingResult.embedding);
 
   if (!updateResult.success) {
     return { success: false, error: updateResult.error };
+  }
+
+  try {
+    await deps.updateEmbeddingCache(embeddingKey, embeddingResult.embedding);
+  } catch (error) {
+    console.warn(`Embedding cache insert warning: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   return {

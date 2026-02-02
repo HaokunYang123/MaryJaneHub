@@ -1,8 +1,8 @@
 /**
- * Semantic Search Module
+ * Search Module
  *
  * Provides semantic search capabilities using Gemini embeddings
- * and Supabase pgvector. Supports both vector-only and hybrid search.
+ * and Supabase pgvector. Supports vector-only, hybrid, and smart search.
  */
 
 export {
@@ -23,3 +23,19 @@ export {
   generateAndStoreEmbedding,
   type SearchError,
 } from "./semantic-search";
+
+// Smart search (structured + semantic)
+export {
+  smartSearch,
+  type SmartSearchResult,
+  type SmartSearchResponse,
+  type SmartSearchError,
+  type SmartSearchResultType,
+} from "./smart-search";
+
+// Query parser
+export {
+  parseQuery,
+  formatParsedQuery,
+  type ParsedQuery,
+} from "./parse-query";
