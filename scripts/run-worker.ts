@@ -20,8 +20,8 @@ async function main() {
   const mode = args[0] || "full"; // 'full' | 'worker-only'
 
   const config = {
-    concurrency: parseInt(args[1] || "3", 10),
-    batchSize: parseInt(args[2] || "5", 10),
+    concurrency: parseInt(args[1] || "12", 10),
+    batchSize: parseInt(args[2] || "15", 10),
     maxRunTime: undefined as number | undefined, // No limit for manual runs
   };
 

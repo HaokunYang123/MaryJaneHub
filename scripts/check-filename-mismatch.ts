@@ -68,19 +68,44 @@ async function main() {
   console.log("Prefix breakdown by document_type:");
   console.log("=".repeat(40));
 
-  const types = ["receipt", "invoice", "bank_statement"];
+  const types = ["receipt", "invoice", "bank_statement", "correspondence", "other"];
   for (const type of types) {
     const ofType = docs.filter((d) => d.document_type === type);
     const withReceipt = ofType.filter((d) => d.file_name.includes("_RECEIPT_")).length;
     const withInvoice = ofType.filter((d) => d.file_name.includes("_INVOICE_")).length;
     const withBankStmt = ofType.filter((d) => d.file_name.includes("_BANK-STMT_")).length;
-    const other = ofType.length - withReceipt - withInvoice - withBankStmt;
+    const withDoc = ofType.filter((d) => d.file_name.includes("_DOC_")).length;
+    const other = ofType.length - withReceipt - withInvoice - withBankStmt - withDoc;
 
     console.log(`\n  ${type} (${ofType.length} total):`);
     if (withReceipt) console.log(`    _RECEIPT_: ${withReceipt}`);
     if (withInvoice) console.log(`    _INVOICE_: ${withInvoice}`);
     if (withBankStmt) console.log(`    _BANK-STMT_: ${withBankStmt}`);
+    if (withDoc) console.log(`    _DOC_: ${withDoc}`);
     if (other) console.log(`    Other: ${other}`);
+  }
+
+  // Count files that need renaming (DOC prefix but not "other" type)
+  console.log("\n" + "=".repeat(40));
+  console.log("Files needing rename (wrong _DOC_ prefix):");
+  console.log("=".repeat(40));
+
+  const invoicesWithDoc = docs.filter(
+    (d) => d.document_type === "invoice" && d.file_name.includes("_DOC_")
+  );
+  const receiptsWithDoc = docs.filter(
+    (d) => d.document_type === "receipt" && d.file_name.includes("_DOC_")
+  );
+
+  console.log(`  Invoices with _DOC_ prefix: ${invoicesWithDoc.length}`);
+  console.log(`  Receipts with _DOC_ prefix: ${receiptsWithDoc.length}`);
+  console.log(`  Total needing rename: ${invoicesWithDoc.length + receiptsWithDoc.length}`);
+
+  if (invoicesWithDoc.length > 0) {
+    console.log("\n  Sample invoices with wrong prefix:");
+    invoicesWithDoc.slice(0, 5).forEach((d, i) => {
+      console.log(`    ${i + 1}. ${d.file_name}`);
+    });
   }
 }
 

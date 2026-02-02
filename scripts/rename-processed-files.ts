@@ -57,7 +57,12 @@ async function renameProcessedFiles(dryRun: boolean = true): Promise<RenameResul
       const extraction = doc.extraction as DocumentExtraction;
 
       // Generate new filename using updated function
-      const newName = generateCleanFilename(extraction, doc.file_name);
+      // Pass document_type from database as override (canonical source of truth)
+      const newName = generateCleanFilename(
+        extraction,
+        doc.file_name,
+        doc.document_type as any
+      );
 
       // Check if rename needed
       if (doc.file_name === newName) {
