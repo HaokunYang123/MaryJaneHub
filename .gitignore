@@ -4,6 +4,8 @@ dist/
 *.log
 .env
 .env.local
+.DS_Store
+*.tgz
 
 google-credentials.json
 benchmark-results.json
