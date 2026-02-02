@@ -7,20 +7,25 @@
     "build": "next build",
     "start": "next start",
     "test:ocr": "npx tsx scripts/test-document-ai.ts",
+    "test:ocr:timeout": "npx tsx scripts/test-document-ai-timeout.ts",
     "test:gemini": "npx tsx scripts/test-gemini-extraction.ts",
+    "test:gemini:timeout": "npx tsx scripts/test-gemini-timeout.ts",
     "test:gcs": "npx tsx scripts/test-gcs-upload.ts",
     "test:pipeline": "npx tsx scripts/test-pipeline.ts",
     "test:supabase": "npx tsx scripts/test-supabase.ts",
     "test:drive": "npx tsx scripts/test-drive.ts",
+    "test:drive-retry": "npx tsx scripts/test-drive-retry.ts",
     "workflow": "npx tsx scripts/test-full-workflow.ts",
     "poll": "npx tsx scripts/poll-inbox.ts",
     "test:classifier": "npx tsx scripts/test-classifier.ts",
     "test:extractors": "npx tsx scripts/test-all-extractors.ts",
     "qb:api": "npx tsx scripts/test-qb-api.ts",
+    "test:qb:idempotency": "npx tsx scripts/test-qb-idempotency.ts",
     "test:full": "npx tsx scripts/test-full-pipeline.ts",
     "embeddings:backfill": "npx tsx scripts/backfill-embeddings.ts",
     "test:search": "npx tsx scripts/test-semantic-search.ts",
     "test:search:compare": "npx tsx scripts/compare-search-modes.ts",
+    "test:embedding:cache": "npx tsx scripts/test-embedding-cache.ts",
     "benchmark": "npx tsx scripts/benchmark-all.ts",
     "benchmark:quick": "npx tsx scripts/benchmark-all.ts --quick",
     "debug:search": "npx tsx scripts/debug-search-performance.ts",
@@ -35,7 +40,18 @@
     "embeddings:regenerate": "npx tsx scripts/regenerate-embeddings.ts",
     "export": "npx tsx scripts/export-data.ts",
     "reclassify": "npx tsx scripts/reclassify-documents.ts",
-    "reclassify:dry": "npx tsx scripts/reclassify-documents.ts --dry-run"
+    "reclassify:dry": "npx tsx scripts/reclassify-documents.ts --dry-run",
+    "reset:dry": "npx tsx scripts/reset-all-data.ts",
+    "reset:execute": "npx tsx scripts/reset-all-data.ts --confirm",
+    "search": "npx tsx scripts/search.ts",
+    "assistant": "npx tsx scripts/assistant-cli.ts",
+    "assistant:test": "npx tsx scripts/test-assistant-router-regression.ts",
+    "assistant:integration": "npx tsx scripts/test-assistant-integration.ts",
+    "healthcheck": "tsx scripts/healthcheck.ts",
+    "assistant:seed-staging": "npx tsx scripts/seed-staging-dataset.ts",
+    "assistant:audit:test": "npx tsx scripts/test-assistant-audit.ts",
+    "verify:evidence:v2": "tsx scripts/verify-evidence-v2.ts",
+    "env:fingerprint": "npx tsx scripts/env-fingerprint.ts"
   },
   "dependencies": {
     "@google-cloud/documentai": "^8.12.0",
@@ -49,6 +65,7 @@
     "intuit-oauth": "^4.2.2",
     "next": "^16.1.6",
     "p-limit": "^7.2.0",
+    "pdf-lib": "^1.17.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "zod": "^4.3.6"
@@ -61,5 +78,9 @@
     "pg": "^8.17.2",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
+  },
+  "overrides": {
+    "whatwg-url": "15.1.0",
+    "tr46": "6.0.0"
   }
 }
