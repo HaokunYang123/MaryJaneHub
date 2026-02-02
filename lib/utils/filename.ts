@@ -205,11 +205,13 @@ function getFilenameInfo(extraction: DocumentExtraction): {
  */
 export function generateCleanFilename(
   extraction: DocumentExtraction,
-  originalName: string
+  originalName: string,
+  documentTypeOverride?: DocumentType
 ): string {
   const extension = getExtension(originalName);
   const info = getFilenameInfo(extraction);
-  const docType = extraction.type || "other";
+  // Use override if provided (from database), otherwise fall back to extraction.type
+  const docType = documentTypeOverride || extraction.type || "other";
 
   // Get type prefix
   const typePrefix = TYPE_PREFIX[docType as keyof typeof TYPE_PREFIX] || TYPE_PREFIX.unknown;

@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { extractWithDocumentAI } from "../document-ai/ocr";
 import { classifyDocument } from "../gemini/classify-document";
+import { validateClassification } from "../gemini/validate-classification";
 import { extractDocument, type DocumentExtraction } from "../gemini/extract-document";
 import { uploadToGCS } from "../gcs/upload";
 import { saveDocument, getDocumentByHash } from "../supabase/documents";
@@ -186,6 +187,12 @@ export async function processDocument(
           syncStatus: existingDoc.sync_status,
           reviewFlags: existingDoc.review_flags || [],
           gcsPath: existingDoc.gcs_path || undefined,
+          gcsBucket: existingDoc.gcs_bucket || undefined,
+          gcsObject: existingDoc.gcs_object || undefined,
+          gcsGeneration: existingDoc.gcs_generation || undefined,
+          gcsHashType: existingDoc.gcs_hash_type || undefined,
+          gcsHashValue: existingDoc.gcs_hash_value || undefined,
+          gcsRetentionStatus: existingDoc.gcs_retention_status || undefined,
           status: "duplicate",
         };
       }
@@ -222,6 +229,14 @@ export async function processDocument(
       documentType = classification.documentType;
       classificationConfidence = classification.confidence;
       console.log(`  Classification: ${documentType} (${(classificationConfidence * 100).toFixed(0)}% confidence)`);
+
+      // Validate and potentially correct classification
+      const validation = validateClassification(documentType, classificationConfidence, rawText);
+      if (validation.wasCorrected) {
+        console.log(`  Validation: corrected ${validation.originalType} → ${validation.validatedType}`);
+        console.log(`    Reason: ${validation.correctionReason}`);
+        documentType = validation.validatedType;
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       processingErrors.push(`Classification failed: ${errorMessage}`);
@@ -287,10 +302,22 @@ export async function processDocument(
 
   // Step 5: Upload to GCS for archival (non-blocking on failure)
   let gcsPath: string | undefined;
+  let gcsBucket: string | undefined;
+  let gcsObject: string | undefined;
+  let gcsGeneration: string | undefined;
+  let gcsHashType: "md5" | "crc32c" | undefined;
+  let gcsHashValue: string | undefined;
+  let gcsRetentionStatus: "confirmed" | "unconfirmed" | undefined;
   try {
     const gcsResult = await uploadToGCS(fileBuffer, fileName, fileHash, mimeType);
     if (gcsResult.success) {
       gcsPath = gcsResult.gcsPath;
+      gcsBucket = gcsResult.gcsBucket;
+      gcsObject = gcsResult.gcsObject;
+      gcsGeneration = gcsResult.gcsGeneration;
+      gcsHashType = gcsResult.gcsHashType;
+      gcsHashValue = gcsResult.gcsHashValue;
+      gcsRetentionStatus = gcsResult.retentionStatus;
     } else {
       console.warn(`GCS upload warning: ${gcsResult.error}`);
     }
@@ -307,6 +334,12 @@ export async function processDocument(
       fileHash,
       mimeType,
       gcsPath,
+      gcsBucket,
+      gcsObject,
+      gcsGeneration,
+      gcsHashType,
+      gcsHashValue,
+      gcsRetentionStatus,
       ocrConfidence,
       rawText,
       extraction,
@@ -370,6 +403,12 @@ export async function processDocument(
     classificationConfidence,
     extraction,
     gcsPath,
+    gcsBucket,
+    gcsObject,
+    gcsGeneration,
+    gcsHashType,
+    gcsHashValue,
+    gcsRetentionStatus,
     documentId,
     syncStatus,
     reviewFlags,

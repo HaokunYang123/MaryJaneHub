@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getGeminiModel, cleanJsonResponse } from "./client";
+import { generateContentWithTimeout } from "./call";
 
 // Zod schemas
 const PartySchema = z.object({
@@ -99,7 +100,7 @@ function parseResponse(rawResponse: string): z.infer<typeof ContractResponseSche
 export async function extractContract(rawText: string): Promise<ContractExtraction> {
   const model = getGeminiModel();
   const prompt = EXTRACTION_PROMPT + rawText;
-  const result = await model.generateContent(prompt);
+  const result = await generateContentWithTimeout(model, prompt);
   const response = result.response;
   const rawResponse = response.text();
 

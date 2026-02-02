@@ -1,5 +1,13 @@
 import { getDriveClient } from "./client";
 import type { MoveResult } from "./types";
+import { retry } from "../utils/retry";
+
+const DRIVE_RETRY_OPTIONS = {
+  retries: 2,
+  baseDelayMs: 200,
+  maxDelayMs: 2000,
+  jitter: true,
+};
 
 /**
  * Move and rename a file in Google Drive
@@ -19,15 +27,19 @@ export async function moveAndRenameFile(
   const drive = getDriveClient();
 
   try {
-    const response = await drive.files.update({
-      fileId,
-      addParents: targetFolderId,
-      removeParents: sourceFolderId,
-      requestBody: {
-        name: newName,
-      },
-      fields: "id, name, parents",
-    });
+    const response = await retry(
+      () =>
+        drive.files.update({
+          fileId,
+          addParents: targetFolderId,
+          removeParents: sourceFolderId,
+          requestBody: {
+            name: newName,
+          },
+          fields: "id, name, parents",
+        }),
+      DRIVE_RETRY_OPTIONS
+    );
 
     return {
       success: true,
@@ -69,13 +81,17 @@ export async function renameFile(
   const drive = getDriveClient();
 
   try {
-    const response = await drive.files.update({
-      fileId,
-      requestBody: {
-        name: newName,
-      },
-      fields: "id, name",
-    });
+    const response = await retry(
+      () =>
+        drive.files.update({
+          fileId,
+          requestBody: {
+            name: newName,
+          },
+          fields: "id, name",
+        }),
+      DRIVE_RETRY_OPTIONS
+    );
 
     return {
       success: true,

@@ -15,6 +15,19 @@ type ITableRow = google.cloud.documentai.v1.Document.Page.Table.ITableRow;
 type ITableCell = google.cloud.documentai.v1.Document.Page.Table.ITableCell;
 type ILayout = google.cloud.documentai.v1.Document.Page.ILayout;
 
+type DocumentAIClient = {
+  processDocument: (request: {
+    name: string;
+    rawDocument: { content: string; mimeType: string };
+  }) => Promise<[google.cloud.documentai.v1.IProcessResponse]>;
+};
+
+let clientOverride: DocumentAIClient | null = null;
+
+export function setDocumentAIClientOverride(client: DocumentAIClient | null): void {
+  clientOverride = client;
+}
+
 /**
  * Get Document AI configuration from environment variables
  */
@@ -31,6 +44,35 @@ function getConfig(): DocumentAIConfig {
   }
 
   return { projectId, processorId, location };
+}
+
+function resolveTimeoutMs(): number {
+  const raw = process.env.DOCUMENT_AI_TIMEOUT_MS;
+  if (!raw) return 60000;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 60000;
+  return parsed;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeoutId: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error("Document AI request timed out"));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("timed out");
 }
 
 /**
@@ -162,7 +204,7 @@ export async function extractWithDocumentAI(
   try {
     const config = getConfig();
 
-    const client = new DocumentProcessorServiceClient();
+    const client = clientOverride ?? new DocumentProcessorServiceClient();
 
     const processorName = `projects/${config.projectId}/locations/${config.location}/processors/${config.processorId}`;
 
@@ -174,7 +216,8 @@ export async function extractWithDocumentAI(
       },
     };
 
-    const [result] = await client.processDocument(request);
+    const timeoutMs = resolveTimeoutMs();
+    const [result] = await withTimeout(client.processDocument(request), timeoutMs);
     const document = result.document;
 
     if (!document) {
@@ -203,7 +246,9 @@ export async function extractWithDocumentAI(
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error occurred";
     const errorCode =
-      error instanceof Error && "code" in error
+      isTimeoutError(error)
+        ? "TIMEOUT"
+        : error instanceof Error && "code" in error
         ? String(error.code)
         : "UNKNOWN_ERROR";
 

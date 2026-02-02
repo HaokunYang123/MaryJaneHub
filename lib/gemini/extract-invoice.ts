@@ -4,6 +4,7 @@ import type {
   GeminiInvoiceResponse,
 } from "./types";
 import { getGeminiModel, cleanJsonResponse } from "./client";
+import { generateContentWithTimeout } from "./call";
 
 const EXTRACTION_PROMPT = `You are an invoice data extraction assistant. Extract structured data from the following invoice text.
 
@@ -101,7 +102,7 @@ export async function extractInvoiceWithGemini(
   const model = getGeminiModel();
   const prompt = EXTRACTION_PROMPT + rawText;
 
-  const result = await model.generateContent(prompt);
+  const result = await generateContentWithTimeout(model, prompt);
   const response = result.response;
   const rawResponse = response.text();
 

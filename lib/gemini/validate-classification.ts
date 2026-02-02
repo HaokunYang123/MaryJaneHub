@@ -320,6 +320,38 @@ export function validateClassification(
   }
 
   // ==========================================
+  // OTHER → INVOICE validation
+  // ==========================================
+
+  // Rule: "other" with strong invoice indicators → Invoice
+  if (classifiedType === "other") {
+    if (invoiceCount >= 3) {
+      return {
+        originalType: "other",
+        validatedType: "invoice",
+        wasCorrected: true,
+        correctionReason: `Found ${invoiceCount} invoice indicators: document appears to be an invoice`,
+      };
+    }
+  }
+
+  // ==========================================
+  // OTHER → RECEIPT validation
+  // ==========================================
+
+  // Rule: "other" with strong receipt indicators → Receipt
+  if (classifiedType === "other") {
+    if (receiptCount >= 3 || (hasFoodKeyword && receiptCount >= 2)) {
+      return {
+        originalType: "other",
+        validatedType: "receipt",
+        wasCorrected: true,
+        correctionReason: `Found ${receiptCount} receipt indicators${hasFoodKeyword ? " with food vendor" : ""}`,
+      };
+    }
+  }
+
+  // ==========================================
   // Cross-type validation
   // ==========================================
 

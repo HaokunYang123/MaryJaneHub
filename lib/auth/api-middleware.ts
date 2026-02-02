@@ -6,6 +6,7 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { timingSafeEqual } from "crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { UserRole } from "./config";
 
@@ -25,6 +26,20 @@ export interface AuthResult {
     role: UserRole | null;
   };
   response?: NextResponse;
+}
+
+const ADMIN_SECRET_HEADER = "x-admin-secret";
+
+function resolveAdminSecret(): string | null {
+  const raw = process.env.ADMIN_SECRET ?? process.env.ADMIN_API_SECRET;
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function safeEqualSecret(left: string, right: string): boolean {
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(Buffer.from(left), Buffer.from(right));
 }
 
 /**
@@ -145,6 +160,30 @@ export async function requireRole(
  * Require admin role
  */
 export async function requireAdmin(request: NextRequest): Promise<AuthResult> {
+  const expectedSecret = resolveAdminSecret();
+  const providedSecret = request.headers.get(ADMIN_SECRET_HEADER)?.trim() || null;
+
+  if (expectedSecret && providedSecret) {
+    if (safeEqualSecret(providedSecret, expectedSecret)) {
+      return {
+        authenticated: true,
+        user: {
+          id: "admin-secret",
+          email: "admin-secret@local",
+          role: "admin",
+        },
+      };
+    }
+
+    return {
+      authenticated: false,
+      response: NextResponse.json(
+        { error: "Unauthorized", message: "Invalid admin secret" },
+        { status: 401 }
+      ),
+    };
+  }
+
   return requireRole(request, "admin");
 }
 

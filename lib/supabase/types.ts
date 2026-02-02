@@ -16,6 +16,12 @@ export interface DocumentRecord {
   file_hash: string;
   mime_type: string | null;
   gcs_path: string | null;
+  gcs_bucket: string | null;
+  gcs_object: string | null;
+  gcs_generation: string | null;
+  gcs_hash_type: string | null;
+  gcs_hash_value: string | null;
+  gcs_retention_status: string | null;
   drive_file_id: string | null;
   ocr_confidence: number | null;
   raw_text: string | null;
@@ -81,6 +87,12 @@ export interface SaveDocumentInput {
   fileHash: string;
   mimeType: string;
   gcsPath?: string;
+  gcsBucket?: string;
+  gcsObject?: string;
+  gcsGeneration?: string;
+  gcsHashType?: string;
+  gcsHashValue?: string;
+  gcsRetentionStatus?: string;
   ocrConfidence: number;
   rawText: string;
   extraction: DocumentExtraction;

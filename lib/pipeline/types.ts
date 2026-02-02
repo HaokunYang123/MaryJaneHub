@@ -35,6 +35,12 @@ export interface ProcessedDocument {
 
   // Storage layer
   gcsPath?: string; // GCS path if uploaded successfully
+  gcsBucket?: string;
+  gcsObject?: string;
+  gcsGeneration?: string;
+  gcsHashType?: "md5" | "crc32c";
+  gcsHashValue?: string;
+  gcsRetentionStatus?: "confirmed" | "unconfirmed";
 
   // Database layer
   documentId?: string; // Supabase document ID if saved successfully

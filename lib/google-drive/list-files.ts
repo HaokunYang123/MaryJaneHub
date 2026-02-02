@@ -1,6 +1,14 @@
 import { getDriveClient } from "./client";
 import type { DriveFile } from "./types";
 import { SUPPORTED_MIME_TYPES } from "./types";
+import { retry } from "../utils/retry";
+
+const DRIVE_RETRY_OPTIONS = {
+  retries: 2,
+  baseDelayMs: 200,
+  maxDelayMs: 2000,
+  jitter: true,
+};
 
 /**
  * List files in a Google Drive folder
@@ -33,13 +41,17 @@ export async function listNewFiles(
 
   // Paginate through all results
   do {
-    const response = await drive.files.list({
-      q: query,
-      fields: "nextPageToken, files(id, name, mimeType, createdTime, size)",
-      orderBy: "createdTime asc", // Oldest first for FIFO processing
-      pageSize: 100, // Max per page
-      pageToken,
-    });
+    const response = await retry(
+      () =>
+        drive.files.list({
+          q: query,
+          fields: "nextPageToken, files(id, name, mimeType, createdTime, size)",
+          orderBy: "createdTime asc", // Oldest first for FIFO processing
+          pageSize: 100, // Max per page
+          pageToken,
+        }),
+      DRIVE_RETRY_OPTIONS
+    );
 
     const files = response.data.files || [];
 
@@ -72,10 +84,14 @@ export async function getFileMetadata(fileId: string): Promise<DriveFile | null>
   const drive = getDriveClient();
 
   try {
-    const response = await drive.files.get({
-      fileId,
-      fields: "id, name, mimeType, createdTime, size",
-    });
+    const response = await retry(
+      () =>
+        drive.files.get({
+          fileId,
+          fields: "id, name, mimeType, createdTime, size",
+        }),
+      DRIVE_RETRY_OPTIONS
+    );
 
     const file = response.data;
     return {

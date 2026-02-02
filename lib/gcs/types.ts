@@ -7,4 +7,10 @@ export interface GCSUploadResult {
   publicUrl?: string;
   error?: string;
   alreadyExists?: boolean; // true if file was already in GCS
+  gcsBucket?: string;
+  gcsObject?: string;
+  gcsGeneration?: string;
+  gcsHashType?: "md5" | "crc32c";
+  gcsHashValue?: string;
+  retentionStatus?: "confirmed" | "unconfirmed";
 }

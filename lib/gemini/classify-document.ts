@@ -1,6 +1,7 @@
 import type { ClassificationResult, DocumentType } from "./document-types";
 import { isValidDocumentType } from "./document-types";
 import { getGeminiModel, cleanJsonResponse } from "./client";
+import { generateContentWithTimeout } from "./call";
 
 const CLASSIFICATION_PROMPT = `You are an expert document classifier for financial and business documents. Classify the following document into exactly ONE category.
 
@@ -229,7 +230,7 @@ export async function classifyDocument(
   const prompt = CLASSIFICATION_PROMPT + truncatedText;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await generateContentWithTimeout(model, prompt);
     const response = result.response;
     const rawResponse = response.text();
 

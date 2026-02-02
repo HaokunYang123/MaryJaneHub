@@ -1,5 +1,13 @@
 import { getDriveClient } from "./client";
 import type { DownloadResult } from "./types";
+import { retry } from "../utils/retry";
+
+const DRIVE_RETRY_OPTIONS = {
+  retries: 2,
+  baseDelayMs: 200,
+  maxDelayMs: 2000,
+  jitter: true,
+};
 
 /**
  * Download a file from Google Drive as a Buffer
@@ -12,21 +20,29 @@ export async function downloadFile(fileId: string): Promise<DownloadResult> {
 
   try {
     // First get file metadata to know the MIME type
-    const metadataResponse = await drive.files.get({
-      fileId,
-      fields: "mimeType",
-    });
+    const metadataResponse = await retry(
+      () =>
+        drive.files.get({
+          fileId,
+          fields: "mimeType",
+        }),
+      DRIVE_RETRY_OPTIONS
+    );
     const mimeType = metadataResponse.data.mimeType || "application/octet-stream";
 
     // Download the file content
-    const response = await drive.files.get(
-      {
-        fileId,
-        alt: "media",
-      },
-      {
-        responseType: "arraybuffer",
-      }
+    const response = await retry(
+      () =>
+        drive.files.get(
+          {
+            fileId,
+            alt: "media",
+          },
+          {
+            responseType: "arraybuffer",
+          }
+        ),
+      DRIVE_RETRY_OPTIONS
     );
 
     const buffer = Buffer.from(response.data as ArrayBuffer);

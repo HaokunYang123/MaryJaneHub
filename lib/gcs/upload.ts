@@ -1,15 +1,119 @@
-import { Storage } from "@google-cloud/storage";
+import { Storage, type File as GCSFile } from "@google-cloud/storage";
 import type { GCSUploadResult } from "./types";
 
 /**
  * Get the GCS bucket name from environment
  */
 function getBucketName(): string {
-  const bucketName = process.env.GCS_BUCKET_NAME;
+  const bucketName = process.env.GCS_ARCHIVE_BUCKET_NAME || process.env.GCS_BUCKET_NAME;
   if (!bucketName) {
-    throw new Error("GCS_BUCKET_NAME environment variable is required");
+    throw new Error("GCS_ARCHIVE_BUCKET_NAME or GCS_BUCKET_NAME environment variable is required");
   }
   return bucketName;
+}
+
+type GCSObjectMetadata = {
+  bucket?: string;
+  name?: string;
+  generation?: string | number;
+  md5Hash?: string;
+  crc32c?: string;
+  retentionExpirationTime?: string;
+  retention?: {
+    retainUntilTime?: string;
+  };
+};
+
+type GCSMetadataProvider = (
+  bucketName: string,
+  objectPath: string
+) => Promise<GCSObjectMetadata | null>;
+
+let metadataProviderOverride: GCSMetadataProvider | null = null;
+
+export function setGcsMetadataProvider(provider: GCSMetadataProvider | null): void {
+  metadataProviderOverride = provider;
+}
+
+function selectHash(metadata: GCSObjectMetadata | null): {
+  type?: "md5" | "crc32c";
+  value?: string;
+} {
+  if (!metadata) return {};
+  if (metadata.md5Hash) {
+    return { type: "md5", value: metadata.md5Hash };
+  }
+  if (metadata.crc32c) {
+    return { type: "crc32c", value: metadata.crc32c };
+  }
+  return {};
+}
+
+function retentionStatusFromMetadata(
+  metadata: GCSObjectMetadata | null
+): "confirmed" | "unconfirmed" {
+  if (!metadata) return "unconfirmed";
+  if (metadata.retentionExpirationTime || metadata.retention?.retainUntilTime) {
+    return "confirmed";
+  }
+  return "unconfirmed";
+}
+
+async function fetchObjectMetadata(
+  bucketName: string,
+  objectPath: string,
+  file?: GCSFile
+): Promise<GCSObjectMetadata | null> {
+  if (metadataProviderOverride) {
+    return metadataProviderOverride(bucketName, objectPath);
+  }
+
+  if (!file) return null;
+
+  try {
+    const [metadata] = await file.getMetadata();
+    return metadata as GCSObjectMetadata;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[GCS] Metadata lookup failed: ${message}`);
+    return null;
+  }
+}
+
+export async function getArchiveFingerprint(
+  bucketName: string,
+  objectPath: string,
+  file?: GCSFile
+): Promise<Pick<GCSUploadResult, "gcsBucket" | "gcsObject" | "gcsGeneration" | "gcsHashType" | "gcsHashValue" | "retentionStatus">> {
+  const metadata = await fetchObjectMetadata(bucketName, objectPath, file);
+  const hash = selectHash(metadata);
+  return {
+    gcsBucket: bucketName,
+    gcsObject: objectPath,
+    gcsGeneration: metadata?.generation ? String(metadata.generation) : undefined,
+    gcsHashType: hash.type,
+    gcsHashValue: hash.value,
+    retentionStatus: retentionStatusFromMetadata(metadata),
+  };
+}
+
+async function applyRetentionPolicy(file: GCSFile): Promise<void> {
+  const retentionDaysRaw = process.env.GCS_ARCHIVE_RETENTION_DAYS;
+  if (!retentionDaysRaw) return;
+  const retentionDays = Number.parseInt(retentionDaysRaw, 10);
+  if (!Number.isFinite(retentionDays) || retentionDays <= 0) return;
+
+  const retainUntil = new Date(Date.now() + retentionDays * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    await file.setMetadata({
+      retention: {
+        retainUntilTime: retainUntil,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[GCS] Retention policy not confirmed: ${message}`);
+  }
 }
 
 /**
@@ -71,11 +175,20 @@ export async function uploadToGCS(
     });
 
     const gcsPath = `gs://${bucketName}/${objectPath}`;
+    await applyRetentionPolicy(file);
+    const fingerprint = await getArchiveFingerprint(bucketName, objectPath, file);
+
+    if (fingerprint.retentionStatus === "unconfirmed") {
+      console.warn(
+        `[GCS] Retention unconfirmed for gs://${bucketName}/${objectPath}. Configure bucket retention/lock if required.`
+      );
+    }
 
     return {
       success: true,
       gcsPath,
       publicUrl: `https://storage.googleapis.com/${bucketName}/${objectPath}`,
+      ...fingerprint,
     };
   } catch (error: unknown) {
     // Check for "already exists" condition (code 412 or conditionNotMet)
@@ -84,13 +197,24 @@ export async function uploadToGCS(
 
     if (errorCode === 412 || errorReason === "conditionNotMet") {
       // File already exists - this is OK, return success with existing path
-      const bucketName = process.env.GCS_BUCKET_NAME || "";
+      const bucketName = process.env.GCS_ARCHIVE_BUCKET_NAME || process.env.GCS_BUCKET_NAME || "";
       const objectPath = generateObjectPath(fileName, fileHash);
+      const storage = new Storage();
+      const bucket = storage.bucket(bucketName);
+      const file = bucket.file(objectPath);
+      const fingerprint = await getArchiveFingerprint(bucketName, objectPath, file);
+      if (fingerprint.retentionStatus === "unconfirmed") {
+        console.warn(
+          `[GCS] Retention unconfirmed for gs://${bucketName}/${objectPath}. Configure bucket retention/lock if required.`
+        );
+      }
+
       return {
         success: true,
         gcsPath: `gs://${bucketName}/${objectPath}`,
         publicUrl: `https://storage.googleapis.com/${bucketName}/${objectPath}`,
         alreadyExists: true,
+        ...fingerprint,
       };
     }
 

@@ -7,7 +7,7 @@
 
 import type { DocumentExtraction } from "./extract-document";
 
-const EMBEDDING_MODEL = "gemini-embedding-001";
+export const EMBEDDING_MODEL = "gemini-embedding-001";
 const EMBEDDING_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:embedContent`;
 const OUTPUT_DIMENSIONALITY = 768;
 
