@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { FieldEvidenceMap } from "./field-evidence";
 import { getGeminiModel, cleanJsonResponse } from "./client";
-import { generateContentWithTimeout } from "./call";
+import { buildJsonRequest, generateContentWithTimeout } from "./call";
+import { receiptResponseSchema } from "./response-schemas";
 
 // Zod schemas
 const ReceiptItemSchema = z.object({
@@ -90,25 +91,39 @@ function parseResponse(rawResponse: string): z.infer<typeof ReceiptResponseSchem
 export async function extractReceipt(rawText: string): Promise<ReceiptExtraction> {
   const model = getGeminiModel();
   const prompt = EXTRACTION_PROMPT + rawText;
-  const result = await generateContentWithTimeout(model, prompt);
-  const response = result.response;
-  const rawResponse = response.text();
 
+  let rawResponse = "";
   try {
-    const parsed = parseResponse(rawResponse);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const temperature = attempt === 0 ? 0.2 : 0;
+      const request = buildJsonRequest(prompt, receiptResponseSchema, {
+        temperature,
+        maxOutputTokens: 1200,
+      });
+      const result = await generateContentWithTimeout(model, request);
+      const response = result.response;
+      rawResponse = response.text();
+      try {
+        const parsed = parseResponse(rawResponse);
 
-    return {
-      merchant_name: parsed.merchant_name ?? null,
-      date: parsed.date ?? null,
-      total: parsed.total ?? null,
-      payment_method: parsed.payment_method ?? null,
-      items: parsed.items || [],
-      subtotal: parsed.subtotal ?? null,
-      tax: parsed.tax ?? null,
-      tip: parsed.tip ?? null,
-      confidence: calculateConfidence(parsed),
-      raw_response: rawResponse,
-    };
+        return {
+          merchant_name: parsed.merchant_name ?? null,
+          date: parsed.date ?? null,
+          total: parsed.total ?? null,
+          payment_method: parsed.payment_method ?? null,
+          items: parsed.items || [],
+          subtotal: parsed.subtotal ?? null,
+          tax: parsed.tax ?? null,
+          tip: parsed.tip ?? null,
+          confidence: calculateConfidence(parsed),
+          raw_response: rawResponse,
+        };
+      } catch (parseError) {
+        if (attempt === 1) {
+          throw parseError;
+        }
+      }
+    }
   } catch {
     return {
       merchant_name: null,
@@ -123,4 +138,17 @@ export async function extractReceipt(rawText: string): Promise<ReceiptExtraction
       raw_response: rawResponse,
     };
   }
+
+  return {
+    merchant_name: null,
+    date: null,
+    total: null,
+    payment_method: null,
+    items: [],
+    subtotal: null,
+    tax: null,
+    tip: null,
+    confidence: 0,
+    raw_response: rawResponse,
+  };
 }

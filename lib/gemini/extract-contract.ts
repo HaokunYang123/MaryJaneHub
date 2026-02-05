@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { FieldEvidenceMap } from "./field-evidence";
 import { getGeminiModel, cleanJsonResponse } from "./client";
-import { generateContentWithTimeout } from "./call";
+import { buildJsonRequest, generateContentWithTimeout } from "./call";
+import { contractResponseSchema } from "./response-schemas";
 
 // Zod schemas
 const PartySchema = z.object({
@@ -102,25 +103,39 @@ function parseResponse(rawResponse: string): z.infer<typeof ContractResponseSche
 export async function extractContract(rawText: string): Promise<ContractExtraction> {
   const model = getGeminiModel();
   const prompt = EXTRACTION_PROMPT + rawText;
-  const result = await generateContentWithTimeout(model, prompt);
-  const response = result.response;
-  const rawResponse = response.text();
+  let rawResponse = "";
 
   try {
-    const parsed = parseResponse(rawResponse);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const temperature = attempt === 0 ? 0.2 : 0;
+      const request = buildJsonRequest(prompt, contractResponseSchema, {
+        temperature,
+        maxOutputTokens: 1400,
+      });
+      const result = await generateContentWithTimeout(model, request);
+      const response = result.response;
+      rawResponse = response.text();
+      try {
+        const parsed = parseResponse(rawResponse);
 
-    return {
-      contract_type: parsed.contract_type ?? null,
-      parties: parsed.parties || [],
-      effective_date: parsed.effective_date ?? null,
-      expiration_date: parsed.expiration_date ?? null,
-      value: parsed.value ?? null,
-      key_terms: parsed.key_terms || [],
-      governing_law: parsed.governing_law ?? null,
-      termination_clause: parsed.termination_clause ?? null,
-      confidence: calculateConfidence(parsed),
-      raw_response: rawResponse,
-    };
+        return {
+          contract_type: parsed.contract_type ?? null,
+          parties: parsed.parties || [],
+          effective_date: parsed.effective_date ?? null,
+          expiration_date: parsed.expiration_date ?? null,
+          value: parsed.value ?? null,
+          key_terms: parsed.key_terms || [],
+          governing_law: parsed.governing_law ?? null,
+          termination_clause: parsed.termination_clause ?? null,
+          confidence: calculateConfidence(parsed),
+          raw_response: rawResponse,
+        };
+      } catch (parseError) {
+        if (attempt === 1) {
+          throw parseError;
+        }
+      }
+    }
   } catch {
     return {
       contract_type: null,
@@ -135,4 +150,17 @@ export async function extractContract(rawText: string): Promise<ContractExtracti
       raw_response: rawResponse,
     };
   }
+
+  return {
+    contract_type: null,
+    parties: [],
+    effective_date: null,
+    expiration_date: null,
+    value: null,
+    key_terms: [],
+    governing_law: null,
+    termination_clause: null,
+    confidence: 0,
+    raw_response: rawResponse,
+  };
 }

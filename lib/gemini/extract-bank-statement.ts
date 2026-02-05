@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { FieldEvidenceMap } from "./field-evidence";
 import { getGeminiModel, cleanJsonResponse } from "./client";
-import { generateContentWithTimeout } from "./call";
+import { buildJsonRequest, generateContentWithTimeout } from "./call";
+import { bankStatementResponseSchema } from "./response-schemas";
 
 // Zod schemas
 const TransactionSchema = z.object({
@@ -97,26 +98,40 @@ function parseResponse(rawResponse: string): z.infer<typeof BankStatementRespons
 export async function extractBankStatement(rawText: string): Promise<BankStatementExtraction> {
   const model = getGeminiModel();
   const prompt = EXTRACTION_PROMPT + rawText;
-  const result = await generateContentWithTimeout(model, prompt);
-  const response = result.response;
-  const rawResponse = response.text();
+  let rawResponse = "";
 
   try {
-    const parsed = parseResponse(rawResponse);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const temperature = attempt === 0 ? 0.2 : 0;
+      const request = buildJsonRequest(prompt, bankStatementResponseSchema, {
+        temperature,
+        maxOutputTokens: 1400,
+      });
+      const result = await generateContentWithTimeout(model, request);
+      const response = result.response;
+      rawResponse = response.text();
+      try {
+        const parsed = parseResponse(rawResponse);
 
-    return {
-      bank_name: parsed.bank_name ?? null,
-      account_number_last4: parsed.account_number_last4 ?? null,
-      statement_period_start: parsed.statement_period_start ?? null,
-      statement_period_end: parsed.statement_period_end ?? null,
-      opening_balance: parsed.opening_balance ?? null,
-      closing_balance: parsed.closing_balance ?? null,
-      total_deposits: parsed.total_deposits ?? null,
-      total_withdrawals: parsed.total_withdrawals ?? null,
-      transactions: parsed.transactions || [],
-      confidence: calculateConfidence(parsed),
-      raw_response: rawResponse,
-    };
+        return {
+          bank_name: parsed.bank_name ?? null,
+          account_number_last4: parsed.account_number_last4 ?? null,
+          statement_period_start: parsed.statement_period_start ?? null,
+          statement_period_end: parsed.statement_period_end ?? null,
+          opening_balance: parsed.opening_balance ?? null,
+          closing_balance: parsed.closing_balance ?? null,
+          total_deposits: parsed.total_deposits ?? null,
+          total_withdrawals: parsed.total_withdrawals ?? null,
+          transactions: parsed.transactions || [],
+          confidence: calculateConfidence(parsed),
+          raw_response: rawResponse,
+        };
+      } catch (parseError) {
+        if (attempt === 1) {
+          throw parseError;
+        }
+      }
+    }
   } catch {
     return {
       bank_name: null,
@@ -132,4 +147,18 @@ export async function extractBankStatement(rawText: string): Promise<BankStateme
       raw_response: rawResponse,
     };
   }
+
+  return {
+    bank_name: null,
+    account_number_last4: null,
+    statement_period_start: null,
+    statement_period_end: null,
+    opening_balance: null,
+    closing_balance: null,
+    total_deposits: null,
+    total_withdrawals: null,
+    transactions: [],
+    confidence: 0,
+    raw_response: rawResponse,
+  };
 }

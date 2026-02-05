@@ -2,7 +2,7 @@
 
 ## Working Conventions
 
-- **Language**: Conversation in Chinese, all code/comments/logs in English only
+- **Language**: Conversation in English, all code/comments/logs in English only
 - **No Chinese in code**: Scripts, comments, console output, documentation files must be English
 
 ## Purpose

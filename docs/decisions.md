@@ -1,5 +1,13 @@
 # Technical Decisions
 
+## 2026-02-05: Conversation language set to English
+
+Context: User requested English conversation. | Decision: Use English for conversation; keep code/comments/logs/docs in English. | Reason: Matches user preference while preserving English-only artifacts.
+
+## 2026-02-05: Enforce JSON schema for Gemini outputs + retry empty extraction
+
+Context: Occasional JSON parse errors and zero-confidence extractions caused needs-review noise. | Decision: Use Gemini response schemas (application/json) for classification/extraction and retry once on empty extraction with truncated context. | Reason: Improves stability and reduces false extraction failures without changing model.
+
 ## 2026-02-05: Bucket-level retention only (no per-object retention)
 
 Context: Archive bucket uses retention policy for WORM; per-object retention caused warnings when object retention was disabled. | Decision: Rely solely on bucket-level retention and confirm retention via object metadata. | Reason: Bucket policy is provider-enforced, simpler to operate, and avoids per-object configuration drift.
@@ -64,6 +72,7 @@ Context: Need auth, database, and realtime. | Decision: Use Supabase for all thr
 
 ## Learnings
 
+- Conversation is in English; all code, comments, logs, and documentation must be in English.
 - All code, comments, logs, and documentation must be in English. Chinese is for conversation only.
 - Gemini text-embedding-001 returns 768-dim vectors; pgvector index must match.
 - Google Document AI has separate processor IDs per region; use us for US deployment.

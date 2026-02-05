@@ -4,7 +4,8 @@ import type {
   GeminiInvoiceResponse,
 } from "./types";
 import { getGeminiModel, cleanJsonResponse } from "./client";
-import { generateContentWithTimeout } from "./call";
+import { buildJsonRequest, generateContentWithTimeout } from "./call";
+import { invoiceResponseSchema } from "./response-schemas";
 
 const EXTRACTION_PROMPT = `You are an invoice data extraction assistant. Extract structured data from the following invoice text.
 
@@ -102,26 +103,39 @@ export async function extractInvoiceWithGemini(
   const model = getGeminiModel();
   const prompt = EXTRACTION_PROMPT + rawText;
 
-  const result = await generateContentWithTimeout(model, prompt);
-  const response = result.response;
-  const rawResponse = response.text();
-
+  let rawResponse = "";
   try {
-    const parsed = parseResponse(rawResponse);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const temperature = attempt === 0 ? 0.2 : 0;
+      const request = buildJsonRequest(prompt, invoiceResponseSchema, {
+        temperature,
+        maxOutputTokens: 1200,
+      });
+      const result = await generateContentWithTimeout(model, request);
+      const response = result.response;
+      rawResponse = response.text();
+      try {
+        const parsed = parseResponse(rawResponse);
 
-    return {
-      vendor: parsed.vendor ?? null,
-      invoice_number: parsed.invoice_number ?? null,
-      invoice_date: parsed.invoice_date ?? null,
-      due_date: parsed.due_date ?? null,
-      subtotal: parsed.subtotal ?? null,
-      tax: parsed.tax ?? null,
-      total: parsed.total ?? null,
-      line_items: normalizeLineItems(parsed.line_items),
-      confidence: calculateConfidence(parsed),
-      raw_response: rawResponse,
-    };
-  } catch (parseError) {
+        return {
+          vendor: parsed.vendor ?? null,
+          invoice_number: parsed.invoice_number ?? null,
+          invoice_date: parsed.invoice_date ?? null,
+          due_date: parsed.due_date ?? null,
+          subtotal: parsed.subtotal ?? null,
+          tax: parsed.tax ?? null,
+          total: parsed.total ?? null,
+          line_items: normalizeLineItems(parsed.line_items),
+          confidence: calculateConfidence(parsed),
+          raw_response: rawResponse,
+        };
+      } catch (parseError) {
+        if (attempt === 1) {
+          throw parseError;
+        }
+      }
+    }
+  } catch {
     // Return a failed extraction with the raw response for debugging
     return {
       vendor: null,
@@ -136,4 +150,17 @@ export async function extractInvoiceWithGemini(
       raw_response: rawResponse,
     };
   }
+
+  return {
+    vendor: null,
+    invoice_number: null,
+    invoice_date: null,
+    due_date: null,
+    subtotal: null,
+    tax: null,
+    total: null,
+    line_items: [],
+    confidence: 0,
+    raw_response: rawResponse,
+  };
 }

@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { FieldEvidenceMap } from "./field-evidence";
 import { getGeminiModel, cleanJsonResponse } from "./client";
-import { generateContentWithTimeout } from "./call";
+import { buildJsonRequest, generateContentWithTimeout } from "./call";
+import { taxFormResponseSchema } from "./response-schemas";
 
 // Zod schemas
 const TaxFormResponseSchema = z.object({
@@ -78,28 +79,42 @@ function parseResponse(rawResponse: string): z.infer<typeof TaxFormResponseSchem
 export async function extractTaxForm(rawText: string): Promise<TaxFormExtraction> {
   const model = getGeminiModel();
   const prompt = EXTRACTION_PROMPT + rawText;
-  const result = await generateContentWithTimeout(model, prompt);
-  const response = result.response;
-  const rawResponse = response.text();
+  let rawResponse = "";
 
   try {
-    const parsed = parseResponse(rawResponse);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const temperature = attempt === 0 ? 0.2 : 0;
+      const request = buildJsonRequest(prompt, taxFormResponseSchema, {
+        temperature,
+        maxOutputTokens: 1200,
+      });
+      const result = await generateContentWithTimeout(model, request);
+      const response = result.response;
+      rawResponse = response.text();
+      try {
+        const parsed = parseResponse(rawResponse);
 
-    return {
-      form_type: parsed.form_type ?? null,
-      tax_year: parsed.tax_year ?? null,
-      entity_name: parsed.entity_name ?? null,
-      entity_type: parsed.entity_type ?? null,
-      ein_last4: parsed.ein_last4 ?? null,
-      ssn_last4: parsed.ssn_last4 ?? null,
-      address: parsed.address ?? null,
-      total_income: parsed.total_income ?? null,
-      total_tax: parsed.total_tax ?? null,
-      tax_withheld: parsed.tax_withheld ?? null,
-      refund_or_owed: parsed.refund_or_owed ?? null,
-      confidence: calculateConfidence(parsed),
-      raw_response: rawResponse,
-    };
+        return {
+          form_type: parsed.form_type ?? null,
+          tax_year: parsed.tax_year ?? null,
+          entity_name: parsed.entity_name ?? null,
+          entity_type: parsed.entity_type ?? null,
+          ein_last4: parsed.ein_last4 ?? null,
+          ssn_last4: parsed.ssn_last4 ?? null,
+          address: parsed.address ?? null,
+          total_income: parsed.total_income ?? null,
+          total_tax: parsed.total_tax ?? null,
+          tax_withheld: parsed.tax_withheld ?? null,
+          refund_or_owed: parsed.refund_or_owed ?? null,
+          confidence: calculateConfidence(parsed),
+          raw_response: rawResponse,
+        };
+      } catch (parseError) {
+        if (attempt === 1) {
+          throw parseError;
+        }
+      }
+    }
   } catch {
     return {
       form_type: null,
@@ -117,4 +132,20 @@ export async function extractTaxForm(rawText: string): Promise<TaxFormExtraction
       raw_response: rawResponse,
     };
   }
+
+  return {
+    form_type: null,
+    tax_year: null,
+    entity_name: null,
+    entity_type: null,
+    ein_last4: null,
+    ssn_last4: null,
+    address: null,
+    total_income: null,
+    total_tax: null,
+    tax_withheld: null,
+    refund_or_owed: null,
+    confidence: 0,
+    raw_response: rawResponse,
+  };
 }

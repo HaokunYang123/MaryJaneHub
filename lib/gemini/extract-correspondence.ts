@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { FieldEvidenceMap } from "./field-evidence";
 import { getGeminiModel, cleanJsonResponse } from "./client";
-import { generateContentWithTimeout } from "./call";
+import { buildJsonRequest, generateContentWithTimeout } from "./call";
+import { correspondenceResponseSchema } from "./response-schemas";
 
 // Zod schemas
 const ActionItemSchema = z.object({
@@ -92,27 +93,41 @@ function parseResponse(rawResponse: string): z.infer<typeof CorrespondenceRespon
 export async function extractCorrespondence(rawText: string): Promise<CorrespondenceExtraction> {
   const model = getGeminiModel();
   const prompt = EXTRACTION_PROMPT + rawText;
-  const result = await generateContentWithTimeout(model, prompt);
-  const response = result.response;
-  const rawResponse = response.text();
+  let rawResponse = "";
 
   try {
-    const parsed = parseResponse(rawResponse);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const temperature = attempt === 0 ? 0.2 : 0;
+      const request = buildJsonRequest(prompt, correspondenceResponseSchema, {
+        temperature,
+        maxOutputTokens: 1200,
+      });
+      const result = await generateContentWithTimeout(model, request);
+      const response = result.response;
+      rawResponse = response.text();
+      try {
+        const parsed = parseResponse(rawResponse);
 
-    return {
-      sender: parsed.sender ?? null,
-      sender_organization: parsed.sender_organization ?? null,
-      recipient: parsed.recipient ?? null,
-      recipient_organization: parsed.recipient_organization ?? null,
-      date: parsed.date ?? null,
-      subject: parsed.subject ?? null,
-      summary: parsed.summary ?? null,
-      correspondence_type: parsed.correspondence_type ?? null,
-      action_items: parsed.action_items || [],
-      urgency: parsed.urgency ?? null,
-      confidence: calculateConfidence(parsed),
-      raw_response: rawResponse,
-    };
+        return {
+          sender: parsed.sender ?? null,
+          sender_organization: parsed.sender_organization ?? null,
+          recipient: parsed.recipient ?? null,
+          recipient_organization: parsed.recipient_organization ?? null,
+          date: parsed.date ?? null,
+          subject: parsed.subject ?? null,
+          summary: parsed.summary ?? null,
+          correspondence_type: parsed.correspondence_type ?? null,
+          action_items: parsed.action_items || [],
+          urgency: parsed.urgency ?? null,
+          confidence: calculateConfidence(parsed),
+          raw_response: rawResponse,
+        };
+      } catch (parseError) {
+        if (attempt === 1) {
+          throw parseError;
+        }
+      }
+    }
   } catch {
     return {
       sender: null,
@@ -129,4 +144,19 @@ export async function extractCorrespondence(rawText: string): Promise<Correspond
       raw_response: rawResponse,
     };
   }
+
+  return {
+    sender: null,
+    sender_organization: null,
+    recipient: null,
+    recipient_organization: null,
+    date: null,
+    subject: null,
+    summary: null,
+    correspondence_type: null,
+    action_items: [],
+    urgency: null,
+    confidence: 0,
+    raw_response: rawResponse,
+  };
 }

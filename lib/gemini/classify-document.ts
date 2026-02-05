@@ -1,7 +1,8 @@
 import type { ClassificationResult, DocumentType } from "./document-types";
 import { isValidDocumentType } from "./document-types";
 import { getGeminiModel, cleanJsonResponse } from "./client";
-import { generateContentWithTimeout } from "./call";
+import { buildJsonRequest, generateContentWithTimeout } from "./call";
+import { classificationResponseSchema } from "./response-schemas";
 
 const CLASSIFICATION_PROMPT = `You are an expert document classifier for financial and business documents. Classify the following document into exactly ONE category.
 
@@ -230,11 +231,24 @@ export async function classifyDocument(
   const prompt = CLASSIFICATION_PROMPT + truncatedText;
 
   try {
-    const result = await generateContentWithTimeout(model, prompt);
-    const response = result.response;
-    const rawResponse = response.text();
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const temperature = attempt === 0 ? 0.1 : 0;
+      const request = buildJsonRequest(prompt, classificationResponseSchema, {
+        temperature,
+        maxOutputTokens: 300,
+      });
+      const result = await generateContentWithTimeout(model, request);
+      const response = result.response;
+      const rawResponse = response.text();
+      try {
+        return parseClassificationResponse(rawResponse);
+      } catch (error) {
+        lastError = error;
+      }
+    }
 
-    return parseClassificationResponse(rawResponse);
+    throw lastError ?? new Error("Classification failed after retries");
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";

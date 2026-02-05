@@ -1,4 +1,9 @@
-import type { GenerativeModel } from "@google/generative-ai";
+import type {
+  GenerativeModel,
+  GenerateContentRequest,
+  GenerationConfig,
+  ResponseSchema,
+} from "@google/generative-ai";
 
 export type GeminiTimeoutError = Error & { code: "GEMINI_TIMEOUT" };
 
@@ -65,7 +70,7 @@ async function sleep(ms: number): Promise<void> {
 
 export async function generateContentWithTimeout(
   model: GenerativeModel,
-  prompt: string
+  promptOrRequest: string | GenerateContentRequest
 ) {
   const retries = resolveRetryMax();
   const timeoutMs = resolveTimeoutMs();
@@ -88,10 +93,10 @@ export async function generateContentWithTimeout(
 
     const modelCall = (model as unknown as {
       generateContent: (
-        input: string,
+        input: string | GenerateContentRequest,
         options?: { signal?: AbortSignal }
       ) => Promise<unknown>;
-    }).generateContent(prompt, { signal: controller.signal });
+    }).generateContent(promptOrRequest, { signal: controller.signal });
 
     try {
       return await Promise.race([modelCall, timeoutPromise]);
@@ -108,4 +113,21 @@ export async function generateContentWithTimeout(
   }
 
   throw new Error("Gemini request failed after retries");
+}
+
+export const JSON_RESPONSE_MIME = "application/json";
+
+export function buildJsonRequest(
+  prompt: string,
+  schema: ResponseSchema,
+  overrides: Partial<GenerationConfig> = {}
+): GenerateContentRequest {
+  return {
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: JSON_RESPONSE_MIME,
+      responseSchema: schema,
+      ...overrides,
+    },
+  };
 }

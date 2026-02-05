@@ -260,11 +260,28 @@ export async function processDocument(
       extraction = await extractDocument(documentType, rawText);
       console.log(`  Extraction: ${extraction.type} (${(extraction.data.confidence * 100).toFixed(0)}% confidence)`);
 
-      // Check if extraction produced meaningful results
+      // If extraction produced no meaningful results, retry once with a shorter context
       if (extraction.data.confidence === 0) {
-        processingErrors.push("Extraction produced no valid data");
-        extractionFailed = true;
-        partialFailure = true;
+        const retryText = rawText.length > 8000 ? rawText.slice(0, 8000) : rawText;
+        try {
+          const retryExtraction = await extractDocument(documentType, retryText);
+          console.log(
+            `  Extraction retry: ${retryExtraction.type} (${(retryExtraction.data.confidence * 100).toFixed(0)}% confidence)`
+          );
+          if (retryExtraction.data.confidence > 0) {
+            extraction = retryExtraction;
+          } else {
+            processingErrors.push("Extraction produced no valid data");
+            extractionFailed = true;
+            partialFailure = true;
+          }
+        } catch (retryErr) {
+          const retryMessage = retryErr instanceof Error ? retryErr.message : "Unknown extraction error";
+          processingErrors.push(`Extraction retry failed: ${retryMessage}`);
+          console.warn(`  Extraction retry failed: ${retryMessage}`);
+          extractionFailed = true;
+          partialFailure = true;
+        }
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown extraction error";
