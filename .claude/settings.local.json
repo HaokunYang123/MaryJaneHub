@@ -21,7 +21,11 @@
       "Bash(npm run db:migrate:*)",
       "Bash(npm run rename:dry:*)",
       "Bash(npm run worker:retry-failed:*)",
-      "Bash(npm run reclassify:*)"
+      "Bash(npm run reclassify:*)",
+      "Bash(xargs -I {} sh -c 'echo \"\"=== $\\(basename {}\\) ===\"\" && find {} -type f -name \"\"*.ts\"\" | wc -l')",
+      "Bash(tree:*)",
+      "Bash(__NEW_LINE_58c7c76c688dc5bc__ echo \"\")",
+      "Bash(ls:*)"
     ]
   }
 }
