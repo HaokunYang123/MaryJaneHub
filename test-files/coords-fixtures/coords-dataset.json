@@ -1,0 +1,284 @@
+{
+  "documents": [
+    {
+      "file_name": "coord-invoice-001.pdf",
+      "document_type": "invoice",
+      "lines": [
+        "Vendor: Acme Corp",
+        "Invoice No: AC-1001",
+        "Invoice Date: 2024-01-15",
+        "Due Date: 2024-02-14",
+        "Subtotal: 230.00",
+        "Tax: 20.00",
+        "Total: 250.00"
+      ],
+      "extraction": {
+        "type": "invoice",
+        "data": {
+          "vendor": "Acme Corp",
+          "invoice_number": "AC-1001",
+          "invoice_date": "2024-01-15",
+          "due_date": "2024-02-14",
+          "subtotal": 230,
+          "tax": 20,
+          "total": 250,
+          "line_items": [],
+          "confidence": 0.96,
+          "raw_response": ""
+        }
+      }
+    },
+    {
+      "file_name": "coord-invoice-002.pdf",
+      "document_type": "invoice",
+      "lines": [
+        "Vendor: Blue Sky LLC",
+        "Invoice No: BS-2002",
+        "Invoice Date: 2024-02-10",
+        "Due Date: 2024-03-11",
+        "Subtotal: 480.00",
+        "Tax: 38.40",
+        "Total: 518.40"
+      ],
+      "extraction": {
+        "type": "invoice",
+        "data": {
+          "vendor": "Blue Sky LLC",
+          "invoice_number": "BS-2002",
+          "invoice_date": "2024-02-10",
+          "due_date": "2024-03-11",
+          "subtotal": 480,
+          "tax": 38.4,
+          "total": 518.4,
+          "line_items": [],
+          "confidence": 0.95,
+          "raw_response": ""
+        }
+      }
+    },
+    {
+      "file_name": "coord-invoice-003.pdf",
+      "document_type": "invoice",
+      "lines": [
+        "Vendor: Cedar Point Inc",
+        "Invoice No: CP-3003",
+        "Invoice Date: 2024-03-05",
+        "Due Date: 2024-04-04",
+        "Subtotal: 1200.00",
+        "Tax: 96.00",
+        "Total: 1296.00"
+      ],
+      "extraction": {
+        "type": "invoice",
+        "data": {
+          "vendor": "Cedar Point Inc",
+          "invoice_number": "CP-3003",
+          "invoice_date": "2024-03-05",
+          "due_date": "2024-04-04",
+          "subtotal": 1200,
+          "tax": 96,
+          "total": 1296,
+          "line_items": [],
+          "confidence": 0.97,
+          "raw_response": ""
+        }
+      }
+    },
+    {
+      "file_name": "coord-invoice-004.pdf",
+      "document_type": "invoice",
+      "lines": [
+        "Vendor: Delta Office Supplies",
+        "Invoice No: DO-4004",
+        "Invoice Date: 2024-03-22",
+        "Due Date: 2024-04-21",
+        "Subtotal: 310.00",
+        "Tax: 24.80",
+        "Total: 334.80"
+      ],
+      "extraction": {
+        "type": "invoice",
+        "data": {
+          "vendor": "Delta Office Supplies",
+          "invoice_number": "DO-4004",
+          "invoice_date": "2024-03-22",
+          "due_date": "2024-04-21",
+          "subtotal": 310,
+          "tax": 24.8,
+          "total": 334.8,
+          "line_items": [],
+          "confidence": 0.94,
+          "raw_response": ""
+        }
+      }
+    },
+    {
+      "file_name": "coord-invoice-005.pdf",
+      "document_type": "invoice",
+      "lines": [
+        "Vendor: Evergreen Services",
+        "Invoice No: ES-5005",
+        "Invoice Date: 2024-04-03",
+        "Due Date: 2024-05-03",
+        "Subtotal: 980.00",
+        "Tax: 78.40",
+        "Total: 1058.40"
+      ],
+      "extraction": {
+        "type": "invoice",
+        "data": {
+          "vendor": "Evergreen Services",
+          "invoice_number": "ES-5005",
+          "invoice_date": "2024-04-03",
+          "due_date": "2024-05-03",
+          "subtotal": 980,
+          "tax": 78.4,
+          "total": 1058.4,
+          "line_items": [],
+          "confidence": 0.96,
+          "raw_response": ""
+        }
+      }
+    },
+    {
+      "file_name": "coord-invoice-006.pdf",
+      "document_type": "invoice",
+      "lines": [
+        "Vendor: Falcon Freight",
+        "Invoice No: FF-6006",
+        "Invoice Date: 2024-04-18",
+        "Due Date: 2024-05-18",
+        "Subtotal: 760.00",
+        "Tax: 60.80",
+        "Total: 820.80"
+      ],
+      "extraction": {
+        "type": "invoice",
+        "data": {
+          "vendor": "Falcon Freight",
+          "invoice_number": "FF-6006",
+          "invoice_date": "2024-04-18",
+          "due_date": "2024-05-18",
+          "subtotal": 760,
+          "tax": 60.8,
+          "total": 820.8,
+          "line_items": [],
+          "confidence": 0.95,
+          "raw_response": ""
+        }
+      }
+    },
+    {
+      "file_name": "coord-invoice-007.pdf",
+      "document_type": "invoice",
+      "lines": [
+        "Vendor: Granite Foods",
+        "Invoice No: GF-7007",
+        "Invoice Date: 2024-05-02",
+        "Due Date: 2024-06-01",
+        "Subtotal: 415.00",
+        "Tax: 33.20",
+        "Total: 448.20"
+      ],
+      "extraction": {
+        "type": "invoice",
+        "data": {
+          "vendor": "Granite Foods",
+          "invoice_number": "GF-7007",
+          "invoice_date": "2024-05-02",
+          "due_date": "2024-06-01",
+          "subtotal": 415,
+          "tax": 33.2,
+          "total": 448.2,
+          "line_items": [],
+          "confidence": 0.93,
+          "raw_response": ""
+        }
+      }
+    },
+    {
+      "file_name": "coord-invoice-008.pdf",
+      "document_type": "invoice",
+      "lines": [
+        "Vendor: Harbor Tech",
+        "Invoice No: HT-8008",
+        "Invoice Date: 2024-05-19",
+        "Due Date: 2024-06-18",
+        "Subtotal: 1500.00",
+        "Tax: 120.00",
+        "Total: 1620.00"
+      ],
+      "extraction": {
+        "type": "invoice",
+        "data": {
+          "vendor": "Harbor Tech",
+          "invoice_number": "HT-8008",
+          "invoice_date": "2024-05-19",
+          "due_date": "2024-06-18",
+          "subtotal": 1500,
+          "tax": 120,
+          "total": 1620,
+          "line_items": [],
+          "confidence": 0.97,
+          "raw_response": ""
+        }
+      }
+    },
+    {
+      "file_name": "coord-invoice-009.pdf",
+      "document_type": "invoice",
+      "lines": [
+        "Vendor: Ironwood Consulting",
+        "Invoice No: IC-9009",
+        "Invoice Date: 2024-06-07",
+        "Due Date: 2024-07-07",
+        "Subtotal: 640.00",
+        "Tax: 51.20",
+        "Total: 691.20"
+      ],
+      "extraction": {
+        "type": "invoice",
+        "data": {
+          "vendor": "Ironwood Consulting",
+          "invoice_number": "IC-9009",
+          "invoice_date": "2024-06-07",
+          "due_date": "2024-07-07",
+          "subtotal": 640,
+          "tax": 51.2,
+          "total": 691.2,
+          "line_items": [],
+          "confidence": 0.94,
+          "raw_response": ""
+        }
+      }
+    },
+    {
+      "file_name": "coord-invoice-010.pdf",
+      "document_type": "invoice",
+      "lines": [
+        "Vendor: Juniper Labs",
+        "Invoice No: JL-1010",
+        "Invoice Date: 2024-06-21",
+        "Due Date: 2024-07-21",
+        "Subtotal: 275.00",
+        "Tax: 22.00",
+        "Total: 297.00"
+      ],
+      "extraction": {
+        "type": "invoice",
+        "data": {
+          "vendor": "Juniper Labs",
+          "invoice_number": "JL-1010",
+          "invoice_date": "2024-06-21",
+          "due_date": "2024-07-21",
+          "subtotal": 275,
+          "tax": 22,
+          "total": 297,
+          "line_items": [],
+          "confidence": 0.95,
+          "raw_response": ""
+        }
+      }
+    }
+  ]
+}

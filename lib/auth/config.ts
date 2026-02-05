@@ -10,9 +10,11 @@ export const AUTH_CONFIG = {
     "/dashboard",
     "/documents",
     "/settings",
+    "/admin",
     "/api/documents",
     "/api/quickbooks",
     "/api/cron",
+    "/api/export",
   ],
 
   // Routes that should remain public

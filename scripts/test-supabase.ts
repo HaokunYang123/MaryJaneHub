@@ -19,11 +19,15 @@ async function main(): Promise<void> {
     "GOOGLE_CLOUD_PROJECT_ID",
     "DOCUMENT_AI_PROCESSOR_ID",
     "GEMINI_API_KEY",
-    "GCS_BUCKET_NAME",
     "SUPABASE_URL",
     "SUPABASE_SERVICE_KEY",
   ];
   const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
+  const bucketName =
+    process.env.GCS_ARCHIVE_BUCKET_NAME || process.env.GCS_BUCKET_NAME;
+  if (!bucketName) {
+    missingVars.push("GCS_ARCHIVE_BUCKET_NAME");
+  }
 
   if (missingVars.length > 0) {
     console.error("Missing required environment variables:");

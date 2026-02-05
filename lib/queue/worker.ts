@@ -158,12 +158,16 @@ async function processJob(job: ProcessingJob): Promise<{ skipped: boolean }> {
           job.drive_file_name
         );
       } else {
-        // Partial failure - add _NEEDS_REVIEW suffix
+        // Partial failure - add _NEEDS_REVIEW suffix (avoid duplicates)
         const ext = job.drive_file_name.includes(".")
           ? job.drive_file_name.slice(job.drive_file_name.lastIndexOf("."))
           : "";
         const baseName = job.drive_file_name.replace(ext, "");
-        newFileName = `${baseName}_NEEDS_REVIEW${ext}`;
+        const normalizedBase = baseName.replace(/(_NEEDS_REVIEW)+$/g, "_NEEDS_REVIEW");
+        const suffix = normalizedBase.endsWith("_NEEDS_REVIEW")
+          ? normalizedBase
+          : `${normalizedBase}_NEEDS_REVIEW`;
+        newFileName = `${suffix}${ext}`;
       }
 
       const moveResult = await moveAndRenameFile(

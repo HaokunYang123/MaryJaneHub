@@ -12,6 +12,11 @@ import type { ParsedQuery } from "../search/parse-query";
 export type Intent = "search" | "single_qa" | "sum" | "rag";
 
 /**
+ * Assistant response mode
+ */
+export type AssistantMode = "owner" | "lawyer";
+
+/**
  * Intent descriptions for logging and debugging
  */
 export const INTENT_DESCRIPTIONS: Record<Intent, string> = {

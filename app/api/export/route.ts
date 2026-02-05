@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { exportToCSV, exportToExcel } from "@/lib/export";
 import type { ExportOptions } from "@/lib/export/types";
+import { verifyAuth } from "@/lib/auth/api-middleware";
 
 /**
  * GET /api/export
@@ -18,8 +19,13 @@ import type { ExportOptions } from "@/lib/export/types";
  * - includeRawText: boolean
  * - includeLowConfidence: boolean
  */
-export async function GET(request: Request): Promise<Response> {
+export async function GET(request: NextRequest): Promise<Response> {
   try {
+    const authResult = await verifyAuth(request);
+    if (!authResult.authenticated) {
+      return authResult.response!;
+    }
+
     const { searchParams } = new URL(request.url);
 
     // Parse options from query params

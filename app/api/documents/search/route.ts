@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchDocuments, hybridSearchDocuments } from "@/lib/search/semantic-search";
 import type { DocumentType } from "@/lib/gemini/document-types";
+import { verifyAuth } from "@/lib/auth/api-middleware";
 
 /**
  * GET /api/documents/search
@@ -33,6 +34,11 @@ import type { DocumentType } from "@/lib/gemini/document-types";
  * }
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  const authResult = await verifyAuth(request);
+  if (!authResult.authenticated) {
+    return authResult.response!;
+  }
+
   const searchParams = request.nextUrl.searchParams;
 
   // Get query parameter

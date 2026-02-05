@@ -12,13 +12,15 @@ async function main(): Promise<void> {
   console.log("=== GCS Upload Test ===\n");
 
   // Check for required environment variables
-  if (!process.env.GCS_BUCKET_NAME) {
-    console.error("Missing GCS_BUCKET_NAME environment variable");
+  const bucketName =
+    process.env.GCS_ARCHIVE_BUCKET_NAME || process.env.GCS_BUCKET_NAME;
+  if (!bucketName) {
+    console.error("Missing GCS_ARCHIVE_BUCKET_NAME environment variable");
     console.error("Please set it in .env.local and try again.");
     process.exit(1);
   }
 
-  console.log(`Bucket: ${process.env.GCS_BUCKET_NAME}\n`);
+  console.log(`Bucket: ${bucketName}\n`);
 
   // Check if sample PDF exists
   if (!existsSync(SAMPLE_PDF_PATH)) {

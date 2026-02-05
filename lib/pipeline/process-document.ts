@@ -6,9 +6,13 @@ import { extractDocument, type DocumentExtraction } from "../gemini/extract-docu
 import { uploadToGCS } from "../gcs/upload";
 import { saveDocument, getDocumentByHash } from "../supabase/documents";
 import { analyzeDocument, type SyncStatus, type ReviewFlag } from "../workflow/review-flags";
+import { ensureFieldEvidence } from "../workflow/field-evidence";
+import type { FieldEvidenceMap } from "../gemini/field-evidence";
 import { generateAndStoreEmbedding } from "../search/semantic-search";
 import type { ProcessedDocument } from "./types";
 import type { DocumentType } from "../gemini/document-types";
+import { upsertDocumentLayout } from "../supabase/document-layouts";
+import type { DocumentLayout } from "../document-ai/types";
 
 /**
  * Generate SHA256 hash of a buffer
@@ -207,6 +211,7 @@ export async function processDocument(
   const ocrResult = await extractWithDocumentAI(fileBuffer, mimeType);
   let rawText = "";
   let ocrConfidence = 0;
+  let layout: DocumentLayout | undefined;
 
   if (!ocrResult.success) {
     const ocrError = `OCR failed: ${ocrResult.error.code} - ${ocrResult.error.message}`;
@@ -217,6 +222,7 @@ export async function processDocument(
   } else {
     rawText = ocrResult.rawText;
     ocrConfidence = ocrResult.confidence;
+    layout = ocrResult.layout;
   }
 
   // Step 2: Classify document type (only if OCR succeeded)
@@ -273,6 +279,21 @@ export async function processDocument(
     partialFailure = true;
   }
 
+  // Attach per-field evidence to extraction (value + confidence + evidence)
+  try {
+    const existingEvidence = (extraction.data as Record<string, unknown>)
+      ?.field_evidence as FieldEvidenceMap | undefined;
+    extraction.data.field_evidence = ensureFieldEvidence(
+      extraction,
+      rawText || "",
+      existingEvidence,
+      layout
+    );
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown evidence error";
+    console.warn(`  Field evidence warning: ${errorMessage}`);
+  }
+
   // Step 4: Analyze document for review workflow
   // Determine sync status based on what succeeded/failed
   let syncStatus: SyncStatus = "not_applicable";
@@ -318,6 +339,10 @@ export async function processDocument(
       gcsHashType = gcsResult.gcsHashType;
       gcsHashValue = gcsResult.gcsHashValue;
       gcsRetentionStatus = gcsResult.retentionStatus;
+      if (gcsResult.retentionStatus === "unconfirmed") {
+        processingErrors.push("GCS retention policy not confirmed for archive object");
+        partialFailure = true;
+      }
     } else {
       console.warn(`GCS upload warning: ${gcsResult.error}`);
     }
@@ -360,6 +385,26 @@ export async function processDocument(
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown Supabase error";
     console.warn(`Supabase save warning: ${errorMessage}`);
+  }
+
+  // Step 6b: Persist OCR layout (non-blocking on failure)
+  if (documentId && layout) {
+    try {
+      const layoutResult = await upsertDocumentLayout({
+        documentId,
+        layout,
+      });
+      if (!layoutResult.success) {
+        processingErrors.push(`Layout save failed: ${layoutResult.error}`);
+        partialFailure = true;
+        console.warn(`Layout save warning: ${layoutResult.error}`);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown layout error";
+      processingErrors.push(`Layout save failed: ${errorMessage}`);
+      partialFailure = true;
+      console.warn(`Layout save warning: ${errorMessage}`);
+    }
   }
 
   // Step 7: Generate embedding for semantic search (only if we have text)

@@ -1,5 +1,6 @@
 import type { DocumentType } from "../gemini/document-types";
 import type { DocumentExtraction } from "../gemini/extract-document";
+import type { DocumentLayout } from "../document-ai/types";
 import type { SyncStatus, ReviewFlag } from "../workflow/review-flags";
 
 /**
@@ -48,6 +49,18 @@ export interface DocumentRecord {
   updated_at: string;
   approved_at: string | null;
   approved_by: string | null;
+}
+
+/**
+ * Document layout record as stored in Supabase
+ */
+export interface DocumentLayoutRecord {
+  document_id: string;
+  layout: DocumentLayout;
+  pages: number;
+  layout_version: number;
+  created_at: string;
+  updated_at: string;
 }
 
 /**

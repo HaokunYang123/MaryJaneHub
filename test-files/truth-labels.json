@@ -1,0 +1,29 @@
+{
+  "labels": [
+    {
+      "file_name": "2024-01-15-acme-invoice.pdf",
+      "document_type": "invoice",
+      "fields": {
+        "vendor": "Acme Corp",
+        "invoice_number": "AC-1001",
+        "invoice_date": "2024-01-15",
+        "due_date": "2024-02-14",
+        "subtotal": 230,
+        "tax": 20,
+        "total": 250
+      }
+    },
+    {
+      "file_name": "2024-02-03-acme-receipt.pdf",
+      "document_type": "receipt",
+      "fields": {
+        "merchant_name": "Acme Corp",
+        "date": "2024-02-03",
+        "subtotal": 50,
+        "tax": 4,
+        "total": 54,
+        "payment_method": "credit"
+      }
+    }
+  ]
+}

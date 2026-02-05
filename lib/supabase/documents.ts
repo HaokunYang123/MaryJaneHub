@@ -6,6 +6,24 @@ import type {
   DocumentStatus,
 } from "./types";
 import type { SyncStatus } from "../workflow/review-flags";
+import type { DocumentExtraction } from "../gemini/extract-document";
+import { getEditableFieldsForExtraction } from "../workflow/field-evidence";
+
+function buildExtractionAuditSummary(extraction: DocumentExtraction): Record<string, unknown> {
+  const data = extraction.data as Record<string, unknown>;
+  const fields = getEditableFieldsForExtraction(extraction);
+  const summaryFields: Record<string, unknown> = {};
+
+  for (const field of fields) {
+    summaryFields[field] = field in data ? data[field] : null;
+  }
+
+  return {
+    type: extraction.type,
+    confidence: typeof data.confidence === "number" ? data.confidence : null,
+    fields: summaryFields,
+  };
+}
 
 /**
  * Save a processed document to Supabase
@@ -103,7 +121,7 @@ export async function saveDocument(
       after_data: {
         file_name: doc.fileName,
         file_hash: doc.fileHash,
-        extraction: doc.extraction,
+        extraction_summary: buildExtractionAuditSummary(doc.extraction),
       } as unknown as Record<string, unknown>,
       notes: "Document processed via pipeline",
     });
@@ -111,6 +129,24 @@ export async function saveDocument(
     if (auditError) {
       console.warn(`Failed to create audit log: ${auditError.message}`);
       // Don't fail the whole operation for audit log failure
+    }
+
+    // Log auto-approval decision for auditability
+    if (doc.syncStatus === "auto_approved") {
+      const { error: autoAuditError } = await supabase.from("audit_logs").insert({
+        document_id: inserted.id,
+        actor: "system",
+        action: "modified",
+        after_data: {
+          sync_status: "auto_approved",
+          confidence_score: doc.confidenceScore ?? doc.extraction.data.confidence,
+        } as unknown as Record<string, unknown>,
+        notes: "Auto-approved based on high confidence",
+      });
+
+      if (autoAuditError) {
+        console.warn(`Failed to create auto-approval audit log: ${autoAuditError.message}`);
+      }
     }
 
     return {

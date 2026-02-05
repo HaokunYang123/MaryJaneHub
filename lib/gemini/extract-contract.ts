@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { FieldEvidenceMap } from "./field-evidence";
 import { getGeminiModel, cleanJsonResponse } from "./client";
 import { generateContentWithTimeout } from "./call";
 
@@ -31,6 +32,7 @@ export type KeyTerm = z.infer<typeof KeyTermSchema>;
 export type ContractExtraction = z.infer<typeof ContractResponseSchema> & {
   confidence: number;
   raw_response: string;
+  field_evidence?: FieldEvidenceMap;
 };
 
 const EXTRACTION_PROMPT = `You are a contract data extraction assistant. Extract structured data from the following contract text.

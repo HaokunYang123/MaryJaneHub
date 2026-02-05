@@ -10,6 +10,7 @@ import { AUTH_CONFIG, isProtectedRoute, isPublicRoute } from "@/lib/auth/config"
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const authHeader = request.headers.get("authorization")?.trim() || "";
 
   // Skip middleware for static files and _next
   if (
@@ -18,6 +19,14 @@ export async function middleware(request: NextRequest) {
     pathname.includes(".")
   ) {
     return NextResponse.next();
+  }
+
+  // Allow cron requests with a valid secret to bypass auth checks
+  if (pathname.startsWith("/api/cron")) {
+    const cronSecret = process.env.CRON_SECRET?.trim();
+    if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+      return NextResponse.next();
+    }
   }
 
   // Create response to pass to supabase client
@@ -60,6 +69,12 @@ export async function middleware(request: NextRequest) {
   if (isProtectedRoute(pathname)) {
     // No session, redirect to login
     if (!session) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json(
+          { error: "Unauthorized", message: "Authentication required" },
+          { status: 401 }
+        );
+      }
       const loginUrl = new URL("/login", request.url);
       loginUrl.searchParams.set("redirect", pathname);
       return NextResponse.redirect(loginUrl);
@@ -75,6 +90,12 @@ export async function middleware(request: NextRequest) {
       if (!isWhitelisted) {
         // Sign out and redirect to unauthorized
         await supabase.auth.signOut();
+        if (pathname.startsWith("/api/")) {
+          return NextResponse.json(
+            { error: "Forbidden", message: "User not in whitelist" },
+            { status: 403 }
+          );
+        }
         return NextResponse.redirect(new URL("/unauthorized", request.url));
       }
     }

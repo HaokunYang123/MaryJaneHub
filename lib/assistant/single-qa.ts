@@ -8,7 +8,7 @@
 import { getSupabase } from "../supabase/client";
 import { getGeminiModel } from "../gemini/client";
 import { generateContentWithTimeout } from "../gemini/call";
-import type { Slots, Citation, QAResult, ConfidenceLevel, CandidateDocument } from "./types";
+import type { Slots, Citation, QAResult, ConfidenceLevel, CandidateDocument, AssistantMode } from "./types";
 
 /**
  * Document record from database (subset of fields we need)
@@ -190,7 +190,8 @@ function scoreDocuments(
  */
 async function generateAnswerWithCitations(
   question: string,
-  document: DocumentMatch
+  document: DocumentMatch,
+  mode: AssistantMode
 ): Promise<{ answer: string; rawResponse: string }> {
   const model = getGeminiModel();
 
@@ -199,9 +200,22 @@ async function generateAnswerWithCitations(
 
   // Build context with extraction and raw text
   const extractionSummary = Object.entries(data)
-    .filter(([k, v]) => v !== null && k !== "confidence" && k !== "raw_response" && k !== "line_items")
+    .filter(
+      ([k, v]) =>
+        v !== null &&
+        k !== "confidence" &&
+        k !== "raw_response" &&
+        k !== "line_items" &&
+        k !== "field_evidence"
+    )
     .map(([k, v]) => `${k}: ${v}`)
     .join("\n");
+
+  const modeInstruction =
+    mode === "lawyer"
+      ? `5. Clearly mark uncertainty (e.g., "Not found in the document")\n` +
+        `6. Do NOT provide legal advice or speculative legal reasoning\n`
+      : `5. Be concise for the owner\n`;
 
   const prompt = `You are answering a question about a document. You MUST quote the EXACT text from the document that supports your answer.
 
@@ -222,6 +236,7 @@ INSTRUCTIONS:
 2. Quote the EXACT text from the document that supports your answer using quotation marks
 3. Be concise but include the key information
 4. If you cannot find the answer in the document, say so
+${modeInstruction}
 
 RESPONSE FORMAT:
 Provide your answer with quoted evidence from the document.`;
@@ -351,9 +366,11 @@ function extractAndVerifyCitations(
  */
 export async function answerSingleDocumentQuestion(
   query: string,
-  slots: Slots
+  slots: Slots,
+  options?: { mode?: AssistantMode }
 ): Promise<QAResult> {
   console.log(`[SingleQA] Processing: "${query}"`);
+  const mode: AssistantMode = options?.mode ?? "owner";
 
   // Step 1: Find target document
   const findResult = await findTargetDocument(slots);
@@ -386,7 +403,7 @@ export async function answerSingleDocumentQuestion(
   // Step 2: Generate answer with Gemini
   let answerResult: { answer: string; rawResponse: string };
   try {
-    answerResult = await generateAnswerWithCitations(query, document);
+    answerResult = await generateAnswerWithCitations(query, document, mode);
   } catch (error) {
     return {
       answer: null,

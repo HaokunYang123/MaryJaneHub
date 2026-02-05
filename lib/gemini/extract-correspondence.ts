@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { FieldEvidenceMap } from "./field-evidence";
 import { getGeminiModel, cleanJsonResponse } from "./client";
 import { generateContentWithTimeout } from "./call";
 
@@ -27,6 +28,7 @@ export type ActionItem = z.infer<typeof ActionItemSchema>;
 export type CorrespondenceExtraction = z.infer<typeof CorrespondenceResponseSchema> & {
   confidence: number;
   raw_response: string;
+  field_evidence?: FieldEvidenceMap;
 };
 
 const EXTRACTION_PROMPT = `You are a correspondence data extraction assistant. Extract structured data from the following letter, email, or notice text.

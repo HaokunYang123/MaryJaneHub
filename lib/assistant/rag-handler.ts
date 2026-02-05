@@ -9,7 +9,7 @@ import { getSupabase } from "../supabase/client";
 import { getGeminiModel } from "../gemini/client";
 import { generateContentWithTimeout } from "../gemini/call";
 import { smartSearch } from "../search/smart-search";
-import type { Slots, RAGResult, RAGDocumentRef, Citation, ConfidenceLevel } from "./types";
+import type { Slots, RAGResult, RAGDocumentRef, Citation, ConfidenceLevel, AssistantMode } from "./types";
 import { INSUFFICIENT_INFO_MESSAGE } from "./messages";
 
 /**
@@ -182,10 +182,18 @@ async function queryDocumentsDirectly(
 /**
  * Build the prompt for Gemini to synthesize an answer
  */
-function buildRAGPrompt(query: string, documents: DocumentRecord[]): string {
+function buildRAGPrompt(query: string, documents: DocumentRecord[], mode: AssistantMode): string {
   const documentContexts = documents
     .map((doc, i) => `--- Document ${i + 1} ---\n${buildDocumentSummary(doc)}`)
     .join("\n\n");
+
+  const modeInstructions =
+    mode === "lawyer"
+      ? `6. Prefer short direct quotes from the documents for key facts (use quotation marks)\n` +
+        `7. Clearly mark uncertainty (e.g., \"Not found in the documents\")\n` +
+        `8. Do NOT provide legal advice or speculative legal reasoning\n`
+      : `6. Be concise and practical for the owner\n` +
+        `7. Prefer short direct quotes when helpful (use quotation marks)\n`;
 
   return `You are a helpful assistant answering questions about business documents.
 
@@ -195,6 +203,7 @@ IMPORTANT RULES:
 3. When stating facts, ALWAYS cite the source document by filename in brackets: [filename.pdf]
 4. Be specific and include relevant details (dates, amounts, vendors)
 5. If multiple documents are relevant, synthesize information from all of them
+${modeInstructions}
 
 USER QUESTION: ${query}
 
@@ -209,10 +218,11 @@ Provide a comprehensive answer with citations. Include specific details like dat
  */
 async function synthesizeAnswer(
   query: string,
-  documents: DocumentRecord[]
+  documents: DocumentRecord[],
+  mode: AssistantMode
 ): Promise<string> {
   const model = getGeminiModel();
-  const prompt = buildRAGPrompt(query, documents);
+  const prompt = buildRAGPrompt(query, documents, mode);
 
   try {
     const result = await generateContentWithTimeout(model, prompt);
@@ -330,8 +340,13 @@ function calculateTotalAmount(documents: DocumentRecord[]): number | undefined {
 /**
  * Main function: Execute RAG query
  */
-export async function executeRAG(query: string, slots: Slots): Promise<RAGResult> {
+export async function executeRAG(
+  query: string,
+  slots: Slots,
+  options?: { mode?: AssistantMode }
+): Promise<RAGResult> {
   console.log(`[RAG] Processing query: "${query}"`);
+  const mode: AssistantMode = options?.mode ?? "owner";
 
   // Step 1: Retrieve relevant documents
   let documents: DocumentRecord[] = [];
@@ -360,7 +375,7 @@ export async function executeRAG(query: string, slots: Slots): Promise<RAGResult
   // Step 2: Synthesize answer using Gemini
   let answer: string;
   try {
-    answer = await synthesizeAnswer(query, documents);
+    answer = await synthesizeAnswer(query, documents, mode);
   } catch (error) {
     return {
       answer: INSUFFICIENT_INFO_MESSAGE,
@@ -408,7 +423,11 @@ export async function executeRAG(query: string, slots: Slots): Promise<RAGResult
 /**
  * Format RAG result as a human-readable message
  */
-export function formatRAGResult(result: RAGResult): string {
+export function formatRAGResult(result: RAGResult, mode: AssistantMode = "owner"): string {
+  if (mode === "lawyer") {
+    return result.answer;
+  }
+
   let message = result.answer;
 
   // Add summary section with disclaimer about document scope

@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { generateSummaryReport } from "@/lib/export";
 import type { ExportOptions } from "@/lib/export/types";
+import { verifyAuth } from "@/lib/auth/api-middleware";
 
 /**
  * GET /api/export/summary
@@ -15,8 +16,13 @@ import type { ExportOptions } from "@/lib/export/types";
  * - maxAmount: number
  * - status: comma-separated sync statuses
  */
-export async function GET(request: Request): Promise<NextResponse> {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
+    const authResult = await verifyAuth(request);
+    if (!authResult.authenticated) {
+      return authResult.response!;
+    }
+
     const { searchParams } = new URL(request.url);
 
     // Parse options from query params

@@ -122,7 +122,7 @@ export async function syncDocumentWithDeps(
 
     // Get extraction data
     const extraction = doc.extraction;
-    if (!extraction || extraction.type !== "invoice") {
+    if (!extraction || (extraction.type !== "invoice" && extraction.type !== "other")) {
       return {
         success: false,
         documentId,

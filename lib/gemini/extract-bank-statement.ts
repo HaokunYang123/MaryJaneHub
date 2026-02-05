@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { FieldEvidenceMap } from "./field-evidence";
 import { getGeminiModel, cleanJsonResponse } from "./client";
 import { generateContentWithTimeout } from "./call";
 
@@ -28,6 +29,7 @@ export type Transaction = z.infer<typeof TransactionSchema>;
 export type BankStatementExtraction = z.infer<typeof BankStatementResponseSchema> & {
   confidence: number;
   raw_response: string;
+  field_evidence?: FieldEvidenceMap;
 };
 
 const EXTRACTION_PROMPT = `You are a bank statement data extraction assistant. Extract structured data from the following bank statement text.

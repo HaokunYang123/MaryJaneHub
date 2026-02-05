@@ -23,6 +23,7 @@
     "test:qb:idempotency": "npx tsx scripts/test-qb-idempotency.ts",
     "test:full": "npx tsx scripts/test-full-pipeline.ts",
     "embeddings:backfill": "npx tsx scripts/backfill-embeddings.ts",
+    "evidence:backfill": "node --import tsx scripts/backfill-field-evidence.ts",
     "test:search": "npx tsx scripts/test-semantic-search.ts",
     "test:search:compare": "npx tsx scripts/compare-search-modes.ts",
     "test:embedding:cache": "npx tsx scripts/test-embedding-cache.ts",
@@ -50,8 +51,19 @@
     "healthcheck": "tsx scripts/healthcheck.ts",
     "assistant:seed-staging": "npx tsx scripts/seed-staging-dataset.ts",
     "assistant:audit:test": "npx tsx scripts/test-assistant-audit.ts",
+    "test:backfill:idempotency": "node --import tsx scripts/test-field-evidence-backfill-idempotency.ts",
+    "test:evidence:excerpt": "node --import tsx scripts/test-evidence-excerpt.ts",
+    "test:bank-statement": "node --import tsx scripts/test-bank-statement-field-mapping.ts",
     "verify:evidence:v2": "tsx scripts/verify-evidence-v2.ts",
-    "env:fingerprint": "npx tsx scripts/env-fingerprint.ts"
+    "env:fingerprint": "npx tsx scripts/env-fingerprint.ts",
+    "seed:toy": "node --import tsx scripts/seed-toy-dataset.ts",
+    "eval:accuracy": "npx tsx scripts/evaluate-accuracy.ts",
+    "test:evidence:quality": "npx tsx scripts/test-evidence-quality.ts",
+    "test:evidence:coords": "npx tsx scripts/test-evidence-coords.ts",
+    "gcs:cleanup": "npx tsx scripts/cleanup-gcs.ts",
+    "audit:security": "npx tsx scripts/audit-api-security.ts",
+    "benchmark:speed-floors": "npx tsx scripts/benchmark-speed-floors.ts",
+    "benchmark:speed-floors:quick": "npx tsx scripts/benchmark-speed-floors.ts --quick"
   },
   "dependencies": {
     "@google-cloud/documentai": "^8.12.0",

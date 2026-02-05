@@ -12,7 +12,9 @@ interface ResetStats {
   supabase: {
     auditLogs: number;
     processingJobs: number;
+    documentLayouts: number;
     documents: number;
+    qbTokens: number;
   };
   googleDrive: {
     inboxFiles: number;
@@ -26,19 +28,31 @@ interface ResetStats {
 async function countSupabaseRecords(): Promise<ResetStats["supabase"]> {
   const supabase = getSupabase();
 
-  const [auditLogsResult, processingJobsResult, documentsResult] =
+  const [
+    auditLogsResult,
+    processingJobsResult,
+    documentLayoutsResult,
+    documentsResult,
+    qbTokensResult,
+  ] =
     await Promise.all([
       supabase.from("audit_logs").select("*", { count: "exact", head: true }),
       supabase
         .from("processing_jobs")
         .select("*", { count: "exact", head: true }),
+      supabase
+        .from("document_layouts")
+        .select("*", { count: "exact", head: true }),
       supabase.from("documents").select("*", { count: "exact", head: true }),
+      supabase.from("qb_tokens").select("*", { count: "exact", head: true }),
     ]);
 
   return {
     auditLogs: auditLogsResult.count || 0,
     processingJobs: processingJobsResult.count || 0,
+    documentLayouts: documentLayoutsResult.count || 0,
     documents: documentsResult.count || 0,
+    qbTokens: qbTokensResult.count || 0,
   };
 }
 
@@ -71,7 +85,19 @@ async function clearSupabaseTables(): Promise<void> {
   }
   console.log("  Cleared processing_jobs");
 
-  // 3. documents (base table)
+  // 3. document_layouts (references documents)
+  const { error: layoutsError } = await supabase
+    .from("document_layouts")
+    .delete()
+    .gte("document_id", "00000000-0000-0000-0000-000000000000");
+
+  if (layoutsError) {
+    console.warn(`  Warning: Failed to clear document_layouts: ${layoutsError.message}`);
+  } else {
+    console.log("  Cleared document_layouts");
+  }
+
+  // 4. documents (base table)
   const { error: docsError } = await supabase
     .from("documents")
     .delete()
@@ -81,6 +107,18 @@ async function clearSupabaseTables(): Promise<void> {
     throw new Error(`Failed to clear documents: ${docsError.message}`);
   }
   console.log("  Cleared documents");
+
+  // 5. qb_tokens (no FK dependencies)
+  const { error: tokensError } = await supabase
+    .from("qb_tokens")
+    .delete()
+    .gte("id", "");
+
+  if (tokensError) {
+    console.warn(`  Warning: Failed to clear qb_tokens: ${tokensError.message}`);
+  } else {
+    console.log("  Cleared qb_tokens");
+  }
 }
 
 /**
@@ -99,6 +137,8 @@ async function listDriveFiles(
       fields: "nextPageToken, files(id, name)",
       pageSize: 100,
       pageToken,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
 
     const files = response.data.files || [];
@@ -127,11 +167,12 @@ async function deleteDriveFiles(
 
   for (const file of files) {
     try {
-      await drive.files.delete({ fileId: file.id });
+      await drive.files.delete({ fileId: file.id, supportsAllDrives: true });
       console.log(`  Deleted: ${file.name}`);
       successCount++;
     } catch (error) {
-      console.log(`  Failed: ${file.name}`);
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`  Failed: ${file.name} (${message})`);
       failCount++;
     }
   }
@@ -169,7 +210,7 @@ async function resetAllData(options: ResetOptions): Promise<void> {
   }
 
   const stats: ResetStats = {
-    supabase: { auditLogs: 0, processingJobs: 0, documents: 0 },
+    supabase: { auditLogs: 0, processingJobs: 0, documentLayouts: 0, documents: 0, qbTokens: 0 },
     googleDrive: { inboxFiles: 0, processedFiles: 0 },
   };
 
@@ -179,7 +220,9 @@ async function resetAllData(options: ResetOptions): Promise<void> {
     stats.supabase = await countSupabaseRecords();
     console.log(`  audit_logs: ${stats.supabase.auditLogs}`);
     console.log(`  processing_jobs: ${stats.supabase.processingJobs}`);
+    console.log(`  document_layouts: ${stats.supabase.documentLayouts}`);
     console.log(`  documents: ${stats.supabase.documents}`);
+    console.log(`  qb_tokens: ${stats.supabase.qbTokens}`);
   } catch (error) {
     console.error(
       `  Error: ${error instanceof Error ? error.message : error}`
@@ -232,6 +275,8 @@ async function resetAllData(options: ResetOptions): Promise<void> {
   const totalSupabase =
     stats.supabase.auditLogs +
     stats.supabase.processingJobs +
+    stats.supabase.documentLayouts +
+    stats.supabase.qbTokens +
     stats.supabase.documents;
   const totalDrive =
     stats.googleDrive.inboxFiles + stats.googleDrive.processedFiles;

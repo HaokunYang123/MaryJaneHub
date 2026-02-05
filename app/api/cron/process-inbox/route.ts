@@ -10,9 +10,14 @@ import { queueAndProcessInbox } from "@/lib/queue";
 export async function GET(request: Request): Promise<NextResponse> {
   // Verify cron secret for security
   const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = process.env.CRON_SECRET?.trim();
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    console.error("Cron secret not configured");
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (authHeader !== `Bearer ${cronSecret}`) {
     console.error("Unauthorized cron request");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

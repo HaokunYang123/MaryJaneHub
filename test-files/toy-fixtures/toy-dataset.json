@@ -1,0 +1,175 @@
+{
+  "generated_at": "2026-02-02T21:24:56.855Z",
+  "documents": [
+    {
+      "file_name": "2024-01-15-acme-invoice.pdf",
+      "document_type": "invoice",
+      "raw_text": "INVOICE\nVendor: Acme Corp\nInvoice Number: AC-1001\nInvoice Date: 2024-01-15\nDue Date: 2024-02-14\nSubtotal: $230.00\nTax: $20.00\nTotal: $250.00",
+      "extraction": {
+        "type": "invoice",
+        "data": {
+          "vendor": "Acme Corp",
+          "invoice_number": "AC-1001",
+          "invoice_date": "2024-01-15",
+          "due_date": "2024-02-14",
+          "subtotal": 230,
+          "tax": 20,
+          "total": 250,
+          "line_items": [],
+          "confidence": 1,
+          "raw_response": "toy-seed",
+          "field_evidence": {
+            "vendor": {
+              "value": "Acme Corp",
+              "confidence": 1,
+              "evidence": {
+                "page": 1,
+                "quote": "INVOICE Vendor: Acme Corp Invoice Number: AC-1001 Invoice Date: 2024-01-15 Due Date:",
+                "coords": null
+              }
+            },
+            "invoice_number": {
+              "value": "AC-1001",
+              "confidence": 1,
+              "evidence": {
+                "page": 1,
+                "quote": "INVOICE Vendor: Acme Corp Invoice Number: AC-1001 Invoice Date: 2024-01-15 Due Date: 2024-02-14 Subtotal: $23",
+                "coords": null
+              }
+            },
+            "invoice_date": {
+              "value": "2024-01-15",
+              "confidence": 1,
+              "evidence": {
+                "page": 1,
+                "quote": "ICE Vendor: Acme Corp Invoice Number: AC-1001 Invoice Date: 2024-01-15 Due Date: 2024-02-14 Subtotal: $230.00 Tax: $20.00 Total: $",
+                "coords": null
+              }
+            },
+            "due_date": {
+              "value": "2024-02-14",
+              "confidence": 1,
+              "evidence": {
+                "page": 1,
+                "quote": "Invoice Number: AC-1001 Invoice Date: 2024-01-15 Due Date: 2024-02-14 Subtotal: $230.00 Tax: $20.00 Total: $250.00",
+                "coords": null
+              }
+            },
+            "subtotal": {
+              "value": 230,
+              "confidence": 1,
+              "evidence": {
+                "page": 1,
+                "quote": "01 Invoice Date: 2024-01-15 Due Date: 2024-02-14 Subtotal: $230.00 Tax: $20.00 Total: $250.00",
+                "coords": null
+              }
+            },
+            "tax": {
+              "value": 20,
+              "confidence": 1,
+              "evidence": {
+                "page": 1,
+                "quote": "ICE Vendor: Acme Corp Invoice Number: AC-1001 Invoice Date: 2024-01-15 Due Date: 2024-02-14 Subtotal: $230.00 Tax: $20.00",
+                "coords": null
+              }
+            },
+            "total": {
+              "value": 250,
+              "confidence": 1,
+              "evidence": {
+                "page": 1,
+                "quote": "Due Date: 2024-02-14 Subtotal: $230.00 Tax: $20.00 Total: $250.00",
+                "coords": null
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "file_name": "2024-02-03-acme-receipt.pdf",
+      "document_type": "receipt",
+      "raw_text": "RECEIPT\nMerchant: Acme Corp\nDate: 2024-02-03\nSubtotal: $50.00\nTax: $4.00\nTotal: $54.00\nPayment Method: credit",
+      "extraction": {
+        "type": "receipt",
+        "data": {
+          "merchant_name": "Acme Corp",
+          "date": "2024-02-03",
+          "total": 54,
+          "payment_method": "credit",
+          "items": [],
+          "subtotal": 50,
+          "tax": 4,
+          "tip": 0,
+          "confidence": 1,
+          "raw_response": "toy-seed",
+          "field_evidence": {
+            "merchant_name": {
+              "value": "Acme Corp",
+              "confidence": 1,
+              "evidence": {
+                "page": 1,
+                "quote": "RECEIPT Merchant: Acme Corp Date: 2024-02-03 Subtotal: $50.00 Tax: $4.00 Total: $54.00",
+                "coords": null
+              }
+            },
+            "date": {
+              "value": "2024-02-03",
+              "confidence": 1,
+              "evidence": {
+                "page": 1,
+                "quote": "RECEIPT Merchant: Acme Corp Date: 2024-02-03 Subtotal: $50.00 Tax: $4.00 Total: $54.00 Payment Method: c",
+                "coords": null
+              }
+            },
+            "total": {
+              "value": 54,
+              "confidence": 1,
+              "evidence": {
+                "page": 1,
+                "quote": "e Corp Date: 2024-02-03 Subtotal: $50.00 Tax: $4.00 Total: $54.00 Payment Method: credit",
+                "coords": null
+              }
+            },
+            "subtotal": {
+              "value": 50,
+              "confidence": 1,
+              "evidence": {
+                "page": 1,
+                "quote": "RECEIPT Merchant: Acme Corp Date: 2024-02-03 Subtotal: $50.00 Tax: $4.00 Total: $54.00 Payment Method: credit",
+                "coords": null
+              }
+            },
+            "tax": {
+              "value": 4,
+              "confidence": 1,
+              "evidence": {
+                "page": 1,
+                "quote": "RECEIPT Merchant: Acme Corp Date: 2024-02-03 Subtotal: $50.00 Tax: $4.00 Total: $54.00 Payment Met",
+                "coords": null
+              }
+            },
+            "tip": {
+              "value": 0,
+              "confidence": 1,
+              "evidence": {
+                "page": 1,
+                "quote": "RECEIPT Merchant: Acme Corp Date: 2024-02-03 Subtotal: $50.00 Tax: $4.00 Total: $54.00 Payment M",
+                "coords": null
+              }
+            },
+            "payment_method": {
+              "value": "credit",
+              "confidence": 1,
+              "evidence": {
+                "page": 1,
+                "quote": "3 Subtotal: $50.00 Tax: $4.00 Total: $54.00 Payment Method: credit",
+                "coords": null
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

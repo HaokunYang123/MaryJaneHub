@@ -20,12 +20,12 @@ interface DocumentRow {
 /**
  * Get the date field name based on document type
  */
-function getDateField(documentType?: string): string {
+export function getDateField(documentType?: string): string {
   switch (documentType) {
     case "receipt":
       return "date";
     case "bank_statement":
-      return "statement_date";
+      return "statement_period_end";
     default:
       return "invoice_date";
   }
@@ -34,10 +34,10 @@ function getDateField(documentType?: string): string {
 /**
  * Get the amount field name based on document type
  */
-function getAmountField(documentType?: string): string {
+export function getAmountField(documentType?: string): string {
   switch (documentType) {
     case "bank_statement":
-      return "ending_balance";
+      return "closing_balance";
     default:
       return "total";
   }

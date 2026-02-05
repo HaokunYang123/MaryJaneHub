@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { FieldEvidenceMap } from "./field-evidence";
 import { getGeminiModel, cleanJsonResponse } from "./client";
 import { generateContentWithTimeout } from "./call";
 
@@ -26,6 +27,7 @@ export type ReceiptItem = z.infer<typeof ReceiptItemSchema>;
 export type ReceiptExtraction = z.infer<typeof ReceiptResponseSchema> & {
   confidence: number;
   raw_response: string;
+  field_evidence?: FieldEvidenceMap;
 };
 
 const EXTRACTION_PROMPT = `You are a receipt data extraction assistant. Extract structured data from the following receipt text.

@@ -109,11 +109,22 @@ function extractCitationsFromAudit(audit: EvidenceAuditRow): EvidenceCitation[] 
     .map((citation) => {
       const documentId = citation.document_id ?? citation.documentId ?? citation.doc_id;
       if (!documentId) return null;
+      const rawCoords = citation.coords as Record<string, unknown> | undefined;
+      const coords =
+        rawCoords &&
+        typeof rawCoords.x === "number" &&
+        typeof rawCoords.y === "number" &&
+        typeof rawCoords.w === "number" &&
+        typeof rawCoords.h === "number"
+          ? { x: rawCoords.x, y: rawCoords.y, w: rawCoords.w, h: rawCoords.h }
+          : undefined;
       return {
         document_id: String(documentId),
         page: typeof citation.page === "number" ? citation.page : undefined,
         start_offset: typeof citation.start_offset === "number" ? citation.start_offset : undefined,
         end_offset: typeof citation.end_offset === "number" ? citation.end_offset : undefined,
+        excerpt: typeof citation.excerpt === "string" ? citation.excerpt : undefined,
+        coords,
         verified: typeof citation.verified === "boolean" ? citation.verified : undefined,
         score: typeof citation.score === "number" ? citation.score : undefined,
       } as EvidenceCitation;

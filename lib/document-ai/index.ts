@@ -7,4 +7,9 @@ export type {
   DetectedTable,
   TableRow,
   TableCell,
+  DocumentLayout,
+  DocumentLayoutPage,
+  DocumentLayoutLine,
+  DocumentLayoutBBox,
+  DocumentLayoutSegment,
 } from "./types";

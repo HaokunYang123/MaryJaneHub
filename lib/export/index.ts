@@ -67,7 +67,10 @@ function extractVendorName(doc: DBDocument): string | null {
  */
 function extractAmount(doc: DBDocument): number | null {
   const data = doc.extraction?.data || {};
-  const amount = data.total as number | null;
+  const amount =
+    doc.document_type === "bank_statement"
+      ? (data.closing_balance as number | null)
+      : (data.total as number | null);
   return amount !== undefined && amount !== null && !isNaN(amount) ? amount : null;
 }
 
@@ -407,6 +410,11 @@ export async function exportToCSV(options: ExportOptions = {}): Promise<string> 
 
   return [headers.join(","), ...rows].join("\n");
 }
+
+export const __test__ = {
+  extractDate,
+  extractAmount,
+};
 
 /**
  * Export to Excel workbook

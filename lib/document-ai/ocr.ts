@@ -6,6 +6,10 @@ import type {
   DetectedTable,
   TableRow,
   TableCell,
+  DocumentLayout,
+  DocumentLayoutLine,
+  DocumentLayoutSegment,
+  DocumentLayoutBBox,
 } from "./types";
 
 type IDocument = google.cloud.documentai.v1.IDocument;
@@ -14,6 +18,10 @@ type ITable = google.cloud.documentai.v1.Document.Page.ITable;
 type ITableRow = google.cloud.documentai.v1.Document.Page.Table.ITableRow;
 type ITableCell = google.cloud.documentai.v1.Document.Page.Table.ITableCell;
 type ILayout = google.cloud.documentai.v1.Document.Page.ILayout;
+type IDimension = google.cloud.documentai.v1.Document.Page.IDimension;
+type IBoundingPoly = google.cloud.documentai.v1.IBoundingPoly;
+type IVertex = google.cloud.documentai.v1.IVertex;
+type INormalizedVertex = google.cloud.documentai.v1.INormalizedVertex;
 
 type DocumentAIClient = {
   processDocument: (request: {
@@ -94,6 +102,96 @@ function extractTextFromLayout(
     })
     .join("")
     .trim();
+}
+
+function extractSegments(layout: ILayout | null | undefined): DocumentLayoutSegment[] {
+  const segments = layout?.textAnchor?.textSegments;
+  if (!segments || segments.length === 0) return [];
+  return segments
+    .map((segment) => ({
+      startIndex: Number(segment.startIndex || 0),
+      endIndex: Number(segment.endIndex || 0),
+    }))
+    .filter((segment) => segment.endIndex > segment.startIndex);
+}
+
+function normalizeVerticesFromBoundingPoly(
+  boundingPoly: IBoundingPoly | null | undefined,
+  dimension?: IDimension | null
+): INormalizedVertex[] {
+  if (!boundingPoly) return [];
+  if (boundingPoly.normalizedVertices && boundingPoly.normalizedVertices.length > 0) {
+    return boundingPoly.normalizedVertices;
+  }
+
+  if (!dimension?.width || !dimension?.height || !boundingPoly.vertices) {
+    return [];
+  }
+
+  const width = Number(dimension.width);
+  const height = Number(dimension.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return [];
+  }
+
+  return boundingPoly.vertices
+    .filter((vertex): vertex is IVertex => typeof vertex?.x === "number" && typeof vertex?.y === "number")
+    .map((vertex) => ({
+      x: Math.min(Math.max((vertex.x as number) / width, 0), 1),
+      y: Math.min(Math.max((vertex.y as number) / height, 0), 1),
+    }));
+}
+
+function boundingBoxFromVertices(vertices: INormalizedVertex[]): DocumentLayoutBBox | null {
+  if (!vertices.length) return null;
+  const xs = vertices.map((v) => v.x ?? 0);
+  const ys = vertices.map((v) => v.y ?? 0);
+  const minX = Math.max(Math.min(...xs), 0);
+  const maxX = Math.min(Math.max(...xs), 1);
+  const minY = Math.max(Math.min(...ys), 0);
+  const maxY = Math.min(Math.max(...ys), 1);
+  const w = Math.max(maxX - minX, 0);
+  const h = Math.max(maxY - minY, 0);
+  return { x: minX, y: minY, w, h };
+}
+
+function parseLayoutLines(page: IPage): DocumentLayoutLine[] {
+  if (!page.lines || page.lines.length === 0) return [];
+
+  return page.lines
+    .map((line) => {
+      const segments = extractSegments(line.layout);
+      if (segments.length === 0) return null;
+      const vertices = normalizeVerticesFromBoundingPoly(line.layout?.boundingPoly, page.dimension);
+      const bbox = boundingBoxFromVertices(vertices);
+      return {
+        segments,
+        bbox,
+        confidence: typeof line.layout?.confidence === "number" ? line.layout?.confidence : null,
+      } as DocumentLayoutLine;
+    })
+    .filter(Boolean) as DocumentLayoutLine[];
+}
+
+function parseLayout(
+  pages: IPage[] | null | undefined
+): DocumentLayout | undefined {
+  if (!pages || pages.length === 0) return undefined;
+
+  const layoutPages = pages.map((page, index) => {
+    const width = page.dimension?.width ? Number(page.dimension.width) : undefined;
+    const height = page.dimension?.height ? Number(page.dimension.height) : undefined;
+    const unit = page.dimension?.unit ? String(page.dimension.unit) : undefined;
+    return {
+      pageNumber: page.pageNumber || index + 1,
+      width: Number.isFinite(width) ? width : undefined,
+      height: Number.isFinite(height) ? height : undefined,
+      unit,
+      lines: parseLayoutLines(page),
+    };
+  });
+
+  return { pages: layoutPages };
 }
 
 /**
@@ -234,6 +332,7 @@ export async function extractWithDocumentAI(
     const tables = parseTables(document.pages, rawText);
     const confidence = calculateOverallConfidence(document.pages);
     const pages = document.pages?.length || 0;
+    const layout = parseLayout(document.pages);
 
     return {
       success: true,
@@ -241,6 +340,7 @@ export async function extractWithDocumentAI(
       tables,
       confidence,
       pages,
+      layout,
     };
   } catch (error) {
     const errorMessage =

@@ -8,6 +8,7 @@ export interface AuditCitation {
   page?: number;
   start_offset?: number;
   end_offset?: number;
+  excerpt?: string;
   verified?: boolean;
   score?: number;
 }
@@ -139,6 +140,9 @@ function sanitizeCitations(citations: AuditCitation[] | undefined): AuditCitatio
     page: typeof c.page === "number" ? c.page : undefined,
     start_offset: typeof c.start_offset === "number" ? c.start_offset : undefined,
     end_offset: typeof c.end_offset === "number" ? c.end_offset : undefined,
+    excerpt: typeof (c as { excerpt?: string }).excerpt === "string"
+      ? truncateText((c as { excerpt?: string }).excerpt, MAX_TEXT_LEN)
+      : undefined,
     verified: typeof c.verified === "boolean" ? c.verified : undefined,
     score: typeof c.score === "number" ? c.score : undefined,
   }));

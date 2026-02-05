@@ -11,7 +11,7 @@ config({ path: ".env.local" });
 
 import * as readline from "readline";
 import { handleAssistantQuery, createConversationContext } from "../lib/assistant/clarify";
-import type { ConversationContext, AssistantResponse } from "../lib/assistant/types";
+import type { ConversationContext, AssistantResponse, AssistantMode } from "../lib/assistant/types";
 
 // ANSI colors for terminal output
 const colors = {
@@ -116,6 +116,7 @@ function formatResponse(response: AssistantResponse) {
 
 async function main() {
   printBanner();
+  const mode: AssistantMode = process.env.ASSISTANT_MODE === "lawyer" ? "lawyer" : "owner";
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -184,7 +185,7 @@ async function main() {
       console.log(`${colors.dim}Thinking...${colors.reset}`);
 
       try {
-        const response = await handleAssistantQuery(trimmed, context);
+        const response = await handleAssistantQuery(trimmed, context, undefined, { mode });
         context = response.context;
 
         // Clear the "Thinking..." line and print response

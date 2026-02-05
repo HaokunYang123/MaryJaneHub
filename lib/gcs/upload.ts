@@ -2,12 +2,12 @@ import { Storage, type File as GCSFile } from "@google-cloud/storage";
 import type { GCSUploadResult } from "./types";
 
 /**
- * Get the GCS bucket name from environment
+ * Get the GCS archive bucket name from environment
  */
-function getBucketName(): string {
+function getArchiveBucketName(): string {
   const bucketName = process.env.GCS_ARCHIVE_BUCKET_NAME || process.env.GCS_BUCKET_NAME;
   if (!bucketName) {
-    throw new Error("GCS_ARCHIVE_BUCKET_NAME or GCS_BUCKET_NAME environment variable is required");
+    throw new Error("GCS_ARCHIVE_BUCKET_NAME (or legacy GCS_BUCKET_NAME) is required");
   }
   return bucketName;
 }
@@ -97,25 +97,6 @@ export async function getArchiveFingerprint(
   };
 }
 
-async function applyRetentionPolicy(file: GCSFile): Promise<void> {
-  const retentionDaysRaw = process.env.GCS_ARCHIVE_RETENTION_DAYS;
-  if (!retentionDaysRaw) return;
-  const retentionDays = Number.parseInt(retentionDaysRaw, 10);
-  if (!Number.isFinite(retentionDays) || retentionDays <= 0) return;
-
-  const retainUntil = new Date(Date.now() + retentionDays * 24 * 60 * 60 * 1000).toISOString();
-  try {
-    await file.setMetadata({
-      retention: {
-        retainUntilTime: retainUntil,
-      },
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[GCS] Retention policy not confirmed: ${message}`);
-  }
-}
-
 /**
  * Generate the GCS object path for a file
  * Format: originals/{YYYY}/{MM}/{fileHash}_{originalFileName}
@@ -153,7 +134,7 @@ export async function uploadToGCS(
   mimeType: string
 ): Promise<GCSUploadResult> {
   try {
-    const bucketName = getBucketName();
+    const bucketName = getArchiveBucketName();
     const storage = new Storage();
     const bucket = storage.bucket(bucketName);
 
@@ -175,7 +156,6 @@ export async function uploadToGCS(
     });
 
     const gcsPath = `gs://${bucketName}/${objectPath}`;
-    await applyRetentionPolicy(file);
     const fingerprint = await getArchiveFingerprint(bucketName, objectPath, file);
 
     if (fingerprint.retentionStatus === "unconfirmed") {

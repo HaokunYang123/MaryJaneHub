@@ -18,6 +18,7 @@ import type {
   AssistantResponse,
   QAResult,
   Citation,
+  AssistantMode,
 } from "./types";
 import { answerSingleDocumentQuestion } from "./single-qa";
 import { executeSearch } from "./search-handler";
@@ -55,6 +56,7 @@ function buildCitationMetadata(citations: Citation[]): Array<Record<string, unkn
     document_id: c.docId,
     start_offset: c.span?.[0],
     end_offset: c.span?.[1],
+    excerpt: c.excerpt ? c.excerpt.slice(0, 300) : undefined,
     verified: c.verified,
     score: c.verified ? 1 : 0,
   }));
@@ -345,10 +347,12 @@ export async function handleFollowUp(
 export async function handleAssistantQuery(
   query: string,
   context?: ConversationContext,
-  handlerOverrides?: Partial<AssistantHandlers>
+  handlerOverrides?: Partial<AssistantHandlers>,
+  options?: { mode?: AssistantMode }
 ): Promise<AssistantResponse> {
   const handlers = resolveAssistantHandlers(handlerOverrides);
   const ctx = context || createConversationContext();
+  const mode: AssistantMode = options?.mode ?? "owner";
   const auditRequestId = await startAudit({ actor: "system", inputText: query });
 
   // Add user message to history
@@ -430,7 +434,8 @@ export async function handleAssistantQuery(
         try {
           qaResult = await handlers.answerSingleDocumentQuestion(
             originalQuestion, // Use original question, not follow-up
-            slots
+            slots,
+            { mode }
           );
         } catch {
           qaResult = buildInsufficientQAResult();
@@ -443,7 +448,8 @@ export async function handleAssistantQuery(
       try {
         qaResult = await handlers.answerSingleDocumentQuestion(
           originalQuestion, // Use original question
-          routerResult.slots
+          routerResult.slots,
+          { mode }
         );
       } catch {
         qaResult = buildInsufficientQAResult();
@@ -522,7 +528,7 @@ export async function handleAssistantQuery(
     if (routerResult.intent === "rag") {
       let ragResult: RAGResult;
       try {
-        ragResult = await handlers.executeRAG(originalQuestion, routerResult.slots);
+        ragResult = await handlers.executeRAG(originalQuestion, routerResult.slots, { mode });
       } catch {
         ragResult = {
           answer: INSUFFICIENT_INFO_MESSAGE,
@@ -533,7 +539,9 @@ export async function handleAssistantQuery(
         };
       }
       const isRagError = ragResult.errorCode === "insufficient_info";
-      const message = isRagError ? INSUFFICIENT_INFO_MESSAGE : formatRAGResult(ragResult);
+      const message = isRagError
+        ? INSUFFICIENT_INFO_MESSAGE
+        : formatRAGResult(ragResult, mode);
 
       ctx.history.push({
         role: "assistant",
@@ -638,7 +646,7 @@ export async function handleAssistantQuery(
   if (routerResult.intent === "single_qa") {
     let qaResult: QAResult;
     try {
-      qaResult = await handlers.answerSingleDocumentQuestion(query, routerResult.slots);
+      qaResult = await handlers.answerSingleDocumentQuestion(query, routerResult.slots, { mode });
     } catch {
       qaResult = buildInsufficientQAResult();
     }
@@ -712,7 +720,7 @@ export async function handleAssistantQuery(
   if (routerResult.intent === "rag") {
     let ragResult: RAGResult;
     try {
-      ragResult = await handlers.executeRAG(query, routerResult.slots);
+      ragResult = await handlers.executeRAG(query, routerResult.slots, { mode });
     } catch {
       ragResult = {
         answer: INSUFFICIENT_INFO_MESSAGE,
@@ -723,7 +731,9 @@ export async function handleAssistantQuery(
       };
     }
     const isRagError = ragResult.errorCode === "insufficient_info";
-    const message = isRagError ? INSUFFICIENT_INFO_MESSAGE : formatRAGResult(ragResult);
+    const message = isRagError
+      ? INSUFFICIENT_INFO_MESSAGE
+      : formatRAGResult(ragResult, mode);
 
     ctx.history.push({
       role: "assistant",

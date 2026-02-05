@@ -12,10 +12,9 @@
 
 ## Current Implementation Notes
 - Stored fields: `gcs_bucket`, `gcs_object`, `gcs_generation`, `gcs_hash_type`, `gcs_hash_value`, `gcs_retention_status`.
-- Best-effort: retention enforcement is attempted via per-object metadata if `GCS_ARCHIVE_RETENTION_DAYS` is set.
-- Guaranteed: object immutability is only guaranteed if the bucket has retention policy/object lock configured at the bucket level.
+- Guaranteed: object immutability is only guaranteed if the archive bucket has a retention policy configured (and locked for WORM).
+- Application logic relies on bucket-level retention (no per-object retention writes).
 - Evidence packets include archive fingerprint + retention status; OCR/raw text is scrubbed.
 
 ## Retention Configuration
-- Env placeholder: `GCS_ARCHIVE_RETENTION_DAYS` (optional; used to set per-object retain-until time).
-- Preferred: configure bucket-level retention/lock directly in GCS (not enforced in app code).
+- Configure bucket-level retention/lock directly in GCS (enforced by GCS, not by app code).

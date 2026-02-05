@@ -23,13 +23,33 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const type = searchParams.get("type") as DocumentType | null;
     const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), 100);
     const offset = parseInt(searchParams.get("offset") || "0", 10);
+    const includeRawText = searchParams.get("include_raw_text") === "true";
 
     const supabase = getSupabase();
 
     // Build query
+    const selectFields = includeRawText
+      ? "*"
+      : [
+          "id",
+          "file_name",
+          "document_type",
+          "sync_status",
+          "review_flags",
+          "confidence_score",
+          "extraction_confidence",
+          "extraction",
+          "ocr_confidence",
+          "qb_bill_id",
+          "qb_vendor_id",
+          "gcs_retention_status",
+          "created_at",
+          "updated_at",
+        ].join(", ");
+
     let query = supabase
       .from("documents")
-      .select("*", { count: "exact" });
+      .select(selectFields, { count: "exact" });
 
     // Apply filters
     if (status) {

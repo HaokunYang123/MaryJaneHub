@@ -28,6 +28,36 @@ export interface DetectedTable {
   columnCount: number;
 }
 
+export interface DocumentLayoutSegment {
+  startIndex: number;
+  endIndex: number;
+}
+
+export interface DocumentLayoutBBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface DocumentLayoutLine {
+  segments: DocumentLayoutSegment[];
+  bbox: DocumentLayoutBBox | null;
+  confidence: number | null;
+}
+
+export interface DocumentLayoutPage {
+  pageNumber: number;
+  width?: number;
+  height?: number;
+  unit?: string;
+  lines: DocumentLayoutLine[];
+}
+
+export interface DocumentLayout {
+  pages: DocumentLayoutPage[];
+}
+
 /**
  * Successful result from Document AI OCR
  */
@@ -37,6 +67,7 @@ export interface DocumentAISuccess {
   tables: DetectedTable[];
   confidence: number;
   pages: number;
+  layout?: DocumentLayout;
 }
 
 /**

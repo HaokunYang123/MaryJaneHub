@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { FieldEvidenceMap } from "./field-evidence";
 import { getGeminiModel, cleanJsonResponse } from "./client";
 import { generateContentWithTimeout } from "./call";
 
@@ -21,6 +22,7 @@ const TaxFormResponseSchema = z.object({
 export type TaxFormExtraction = z.infer<typeof TaxFormResponseSchema> & {
   confidence: number;
   raw_response: string;
+  field_evidence?: FieldEvidenceMap;
 };
 
 const EXTRACTION_PROMPT = `You are a tax form data extraction assistant. Extract structured data from the following tax document text.

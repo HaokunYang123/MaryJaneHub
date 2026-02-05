@@ -134,7 +134,7 @@ async function dbSection(): Promise<Section> {
 
   const supabase = createClient(process.env.SUPABASE_URL, key.value);
 
-  const tables = ["documents", "audit_logs", "processing_jobs"];
+  const tables = ["documents", "document_layouts", "audit_logs", "processing_jobs"];
   for (const table of tables) {
     const { count, error } = await supabase.from(table).select("id", { count: "exact", head: true });
     if (error) {

@@ -37,5 +37,6 @@ export type {
   ConversationMessage,
   CandidateDocument,
   AssistantResponse,
+  AssistantMode,
 } from "./types";
 export { INTENT_DESCRIPTIONS, REQUIRED_SLOTS, RECOMMENDED_SLOTS } from "./types";

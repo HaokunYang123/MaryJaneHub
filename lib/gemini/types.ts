@@ -1,3 +1,5 @@
+import type { FieldEvidenceMap } from "./field-evidence";
+
 /**
  * Represents a single line item on an invoice
  */
@@ -22,6 +24,7 @@ export interface InvoiceExtraction {
   line_items: LineItem[];
   confidence: number; // 0-1, based on how many fields were extracted
   raw_response: string; // for debugging
+  field_evidence?: FieldEvidenceMap;
 }
 
 /**
