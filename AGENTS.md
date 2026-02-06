@@ -67,6 +67,8 @@ Also log non-obvious learnings (e.g., "X library doesn't support Y") to avoid re
 - User may adjust tasks mid-phase through discussion; update phase-current accordingly
 - When discussion establishes new conventions or preferences: update AGENTS.md immediately
 - **After corrections or mistakes: update AGENTS.md with the lesson to prevent recurrence**
+- When manually resetting `processing_jobs` from `processing` to `pending`, also clear `steps_completed` (and related step state) to avoid "File buffer not available for processing" on retry
+- For `@google/genai` structured JSON calls, do not force API version `v1` unless verified; default/beta endpoints are required for `responseMimeType` + `responseSchema` support in this project
 - Record any insight or constraint that would be useful in future sessions
 - Don't echo file contents unless asked
 - Keep entries concise: one line per task, one sentence per decision

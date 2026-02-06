@@ -81,6 +81,118 @@ async function qbFetch<T>(
   return response.json() as Promise<T>;
 }
 
+function escapeQBString(value: string): string {
+  return value.replace(/'/g, "\\'");
+}
+
+function normalizeDocNumber(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+}
+
+function parseDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function formatDate(date: Date): string {
+  return date.toISOString().split("T")[0];
+}
+
+function shiftDays(date: Date, offsetDays: number): Date {
+  const shifted = new Date(date.getTime());
+  shifted.setDate(shifted.getDate() + offsetDays);
+  return shifted;
+}
+
+function amountsMatch(left: number | undefined, right: number | null | undefined): boolean {
+  if (typeof left !== "number" || typeof right !== "number") return false;
+  const tolerance = Math.max(1, Math.abs(right) * 0.01);
+  return Math.abs(left - right) <= tolerance;
+}
+
+function daysBetween(left: Date | null, right: Date | null): number | null {
+  if (!left || !right) return null;
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.abs(Math.round((left.getTime() - right.getTime()) / dayMs));
+}
+
+export interface DuplicateBillPreflightInput {
+  vendorId: string;
+  docNumber?: string | null;
+  txnDate?: string | null;
+  total?: number | null;
+}
+
+/**
+ * Find an existing bill in QuickBooks that likely matches the input
+ * to avoid creating cross-system duplicates.
+ */
+export async function findPotentialDuplicateBill(
+  input: DuplicateBillPreflightInput
+): Promise<QBBill | null> {
+  const tokens = await getValidToken();
+  const realmId = tokens.realm_id;
+
+  const invoiceDate = parseDate(input.txnDate);
+  let query: string;
+
+  if (invoiceDate) {
+    const start = formatDate(shiftDays(invoiceDate, -45));
+    const end = formatDate(shiftDays(invoiceDate, 45));
+    query =
+      `SELECT * FROM Bill WHERE VendorRef = '${escapeQBString(input.vendorId)}' ` +
+      `AND TxnDate >= '${start}' AND TxnDate <= '${end}' MAXRESULTS 200`;
+  } else {
+    query = `SELECT * FROM Bill WHERE VendorRef = '${escapeQBString(input.vendorId)}' MAXRESULTS 200`;
+  }
+
+  const encodedQuery = encodeURIComponent(query);
+  const response = await qbFetch<QBQueryResponse<QBBill>>(
+    `/v3/company/${realmId}/query?query=${encodedQuery}&minorversion=65`
+  );
+
+  const bills = response.QueryResponse.Bill || [];
+  if (bills.length === 0) return null;
+
+  const normalizedInputDoc = normalizeDocNumber(input.docNumber);
+  const hasInputDoc = normalizedInputDoc.length > 0;
+
+  const matched = bills.filter((bill) => {
+    if (!bill.Id) return false;
+
+    const normalizedBillDoc = normalizeDocNumber(bill.DocNumber);
+    const dateGap = daysBetween(parseDate(bill.TxnDate), invoiceDate);
+    const amountOk = amountsMatch(bill.TotalAmt, input.total);
+
+    if (hasInputDoc) {
+      if (normalizedBillDoc !== normalizedInputDoc) return false;
+      if (typeof input.total === "number" && typeof bill.TotalAmt === "number" && !amountOk) return false;
+      if (invoiceDate && dateGap !== null && dateGap > 31) return false;
+      return true;
+    }
+
+    if (!amountOk) return false;
+    if (invoiceDate && dateGap !== null && dateGap > 7) return false;
+    return true;
+  });
+
+  if (matched.length === 0) return null;
+
+  matched.sort((a, b) => {
+    const aDate = parseDate(a.TxnDate);
+    const bDate = parseDate(b.TxnDate);
+    if (!aDate && !bDate) return 0;
+    if (!aDate) return 1;
+    if (!bDate) return -1;
+    return bDate.getTime() - aDate.getTime();
+  });
+
+  return matched[0];
+}
+
 /**
  * Get company information
  */

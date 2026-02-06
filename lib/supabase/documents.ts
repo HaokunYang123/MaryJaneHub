@@ -8,6 +8,11 @@ import type {
 import type { SyncStatus } from "../workflow/review-flags";
 import type { DocumentExtraction } from "../gemini/extract-document";
 import { getEditableFieldsForExtraction } from "../workflow/field-evidence";
+import type { InvoiceExtraction } from "../gemini/types";
+import {
+  buildSyncSnapshotFromInvoice,
+  withSyncSnapshotInOverrides,
+} from "../workflow/sync-snapshot";
 
 function buildExtractionAuditSummary(extraction: DocumentExtraction): Record<string, unknown> {
   const data = extraction.data as Record<string, unknown>;
@@ -61,6 +66,12 @@ export async function saveDocument(
     }
 
     // Insert new document
+    const autoSnapshot =
+      doc.syncStatus === "auto_approved" &&
+      (doc.extraction.type === "invoice" || doc.extraction.type === "other")
+        ? buildSyncSnapshotFromInvoice(doc.extraction.data as InvoiceExtraction, "auto_approved")
+        : null;
+
     const { data: inserted, error: insertError } = await supabase
       .from("documents")
       .insert({
@@ -85,6 +96,9 @@ export async function saveDocument(
         sync_status: doc.syncStatus || "not_applicable",
         confidence_score: doc.confidenceScore ?? doc.extraction.data.confidence,
         review_flags: doc.reviewFlags || [],
+        human_overrides: autoSnapshot
+          ? withSyncSnapshotInOverrides(null, autoSnapshot)
+          : null,
       })
       .select("id")
       .single<{ id: string }>();

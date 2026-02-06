@@ -36,3 +36,13 @@ export {
   syncAllApproved,
 } from "./sync-to-quickbooks";
 export type { SyncResult } from "./sync-to-quickbooks";
+
+// Pre-sync checklist
+export {
+  evaluatePreSyncChecklist,
+} from "./pre-sync-checklist";
+export type {
+  PreSyncChecklistInput,
+  PreSyncChecklistResult,
+  PreSyncChecklistCheck,
+} from "./pre-sync-checklist";

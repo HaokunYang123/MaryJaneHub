@@ -1,5 +1,10 @@
 import { getSupabase } from "../supabase/client";
 import type { SyncStatus } from "./review-flags";
+import type { InvoiceExtraction } from "../gemini/types";
+import {
+  buildSyncSnapshotFromInvoice,
+  withSyncSnapshotInOverrides,
+} from "./sync-snapshot";
 
 /**
  * Result of an approval operation
@@ -51,7 +56,7 @@ export async function approveDocument(
     // First, get the current document status
     const { data: doc, error: fetchError } = await supabase
       .from("documents")
-      .select("sync_status, review_flags, document_type")
+      .select("sync_status, review_flags, document_type, extraction, human_overrides")
       .eq("id", documentId)
       .single();
 
@@ -99,6 +104,18 @@ export async function approveDocument(
       updated_at: new Date().toISOString(),
     };
 
+    const extraction = doc.extraction as { type: string; data: unknown } | null;
+    if (extraction && (extraction.type === "invoice" || extraction.type === "other")) {
+      const snapshot = buildSyncSnapshotFromInvoice(
+        extraction.data as InvoiceExtraction,
+        "approved"
+      );
+      updateData.human_overrides = withSyncSnapshotInOverrides(
+        doc.human_overrides as Record<string, unknown> | null | undefined,
+        snapshot
+      );
+    }
+
     if (qbVendorId) {
       updateData.qb_vendor_id = qbVendorId;
     }
@@ -121,7 +138,11 @@ export async function approveDocument(
       document_id: documentId,
       actor: reviewedBy,
       action: "approved",
-      after_data: { sync_status: "approved", qb_vendor_id: qbVendorId },
+      after_data: {
+        sync_status: "approved",
+        qb_vendor_id: qbVendorId,
+        sync_snapshot_version: 1,
+      },
       notes: force ? "Approved with force override" : "Approved for sync",
     });
 

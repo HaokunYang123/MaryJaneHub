@@ -1,5 +1,41 @@
 # Technical Decisions
 
+## 2026-02-06: Lock sync payload to approval snapshot and reconcile after push
+Context: Post-review edits and external QuickBooks state can drift from what was approved, risking incorrect accounting writes. | Decision: Capture `sync_snapshot` at approval/auto-approval, require evidence-backed key fields at sync gate, and reconcile created/reused QB bills against snapshot (vendor/doc/date/total) before final success. | Reason: Preserves reviewer intent, blocks low-trust pushes, and surfaces mismatches as explicit sync errors with audit trail.
+
+## 2026-02-06: Add QuickBooks-side duplicate preflight before bill creation
+Context: Internal idempotency protects replays, but it cannot catch existing bills already present in QuickBooks from external/manual flows. | Decision: Before createBill, query vendor-scoped bills and reuse an existing bill when doc number (or amount/date fallback) indicates a duplicate; record as deduped sync. | Reason: Prevents cross-system duplicate accounting entries while keeping sync idempotent.
+
+## 2026-02-06: Gate QuickBooks sync with pre-sync checklist
+Context: Approved documents could still carry force-approved flags or inconsistent totals before QuickBooks push. | Decision: Add a reusable pre-sync checklist (status, flags, required fields, amount consistency), enforce it in workflow sync + dry-run, and return checklist failures before bill creation. | Reason: Prevents bad accounting writes and gives a deterministic pre-push validation contract.
+
+## 2026-02-06: Strengthen filename convention for business portability and traceability
+Context: Semantic filenames worked but included `$` and missed stable business references in some document types. | Decision: Keep date/type/name core format, switch amount token to `USDxx.xx`, and add reference tokens (invoice number, account suffix, tax form type) when available. | Reason: Aligns with safer cross-platform naming practices and improves legal/accounting traceability during review and due diligence.
+
+## 2026-02-05: Set new 163-file post-migration baseline
+Context: Needed an end-to-end quality/performance checkpoint after cleanup and `@google/genai` migration. | Decision: Accept current baseline (163/163 jobs completed, 0 job failures, avg confidence 0.883, p95 51.6s, wall clock 817s) and prioritize fixes for invoice MAX_TOKENS and extraction_failed edge cases next. | Reason: Confirms stable throughput while focusing effort on the remaining quality tail.
+
+## 2026-02-05: Completed Gemini SDK migration to @google/genai
+Context: Legacy `@google/generative-ai` is deprecated and unsupported for ongoing reliability work. | Decision: Migrate Gemini client/wrapper/schema calls to `@google/genai`, keep compatibility wrapper contract (`{ response }`), and remove deprecated dependency. | Reason: Keeps platform support current without breaking existing pipeline code paths.
+
+## 2026-02-05: Plan migration off legacy Gemini JS SDK
+Context: Current package `@google/generative-ai` is legacy and out of support, increasing long-term reliability risk for structured outputs. | Decision: Keep the new structured-output guardrails now, and schedule migration to `@google/genai` as the next major reliability step. | Reason: Reduces immediate failures today while moving toward a supported SDK path.
+
+## 2026-02-05: Centralized structured-output guardrails for Gemini JSON
+Context: Batch runs still produced invalid/truncated JSON (often MAX_TOKENS), causing classification/extraction drops and noisy review flags. | Decision: Add a shared structured JSON generator with finish-reason diagnostics/retries, reduce classification output schema to essential fields, and add bank-statement key-field fallback when full extraction truncates. | Reason: Fixes root reliability failure mode while balancing throughput, quality, and token cost.
+
+## 2026-02-05: Key-field fallback for low-confidence extraction
+Context: Many documents returned low confidence or empty extractions, slowing review and degrading naming. | Decision: Add a lightweight key-field fallback extraction for missing essentials and log per-doc-type extraction metrics. | Reason: Improves reliability and surfaces bottlenecks without large cost increase.
+
+## 2026-02-05: Name processed files by extraction + sync status
+Context: Processed Drive files were mostly named as page_XXX_NEEDS_REVIEW due to partial_success from archive retention warnings. | Decision: Always generate semantic names from extraction and append _NEEDS_REVIEW only when sync_status indicates review. | Reason: Keeps names meaningful while preserving review signals.
+
+## 2026-02-05: Harden Gemini JSON parsing
+Context: Classification/extraction responses sometimes returned non-JSON text, causing parse errors and degraded quality. | Decision: Add robust JSON extraction/parsing to recover valid JSON blocks before failing. | Reason: Reduces parse failures without changing model behavior.
+
+## 2026-02-05: Adaptive worker concurrency for OCR backfill
+Context: Need high throughput without cost spikes or rate limits during backfill. | Decision: Add adaptive concurrency with throttle backoff and env knobs; surface OCR error codes to drive scaling. | Reason: Keeps performance high while preventing expensive retries or throttling.
+
 ## 2026-02-05: Conversation language set to English
 
 Context: User requested English conversation. | Decision: Use English for conversation; keep code/comments/logs/docs in English. | Reason: Matches user preference while preserving English-only artifacts.
@@ -74,6 +110,8 @@ Context: Need auth, database, and realtime. | Decision: Use Supabase for all thr
 
 - Conversation is in English; all code, comments, logs, and documentation must be in English.
 - All code, comments, logs, and documentation must be in English. Chinese is for conversation only.
+- Resetting `processing_jobs` to `pending` requires clearing `steps_completed` and step fields; otherwise retries can fail with missing in-memory pipeline context.
+- In `@google/genai`, forcing `apiVersion: "v1"` can reject `responseMimeType`/`responseSchema`; use default/beta for structured JSON in this pipeline.
 - Gemini text-embedding-001 returns 768-dim vectors; pgvector index must match.
 - Google Document AI has separate processor IDs per region; use us for US deployment.
 - QuickBooks sandbox tokens expire every hour; refresh logic is mandatory.

@@ -55,4 +55,5 @@ Google Drive Inbox
 - [x] Phase 3 (M3): Backend Validation (accuracy, security audit, speed floors)
 - [ ] Phase 4: TBD — Frontend polish / Bank connectors / Production hardening
 - [x] Phase 5: Evidence Coordinates (Document AI)
-- [ ] Phase 6: TBD
+- [x] Phase 6: Storage Hardening (Archive + Working)
+- [ ] Phase 7: Batch OCR + Backfill Performance

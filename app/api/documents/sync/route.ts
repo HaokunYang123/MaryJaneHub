@@ -3,6 +3,12 @@ import { syncDocument } from "@/lib/workflow/sync-to-quickbooks";
 import { getDocumentById } from "@/lib/supabase/documents";
 import { convertInvoiceToBill, canConvertToBill } from "@/lib/quickbooks/invoice-to-bill";
 import type { InvoiceExtraction } from "@/lib/gemini/types";
+import { verifyAuth } from "@/lib/auth/api-middleware";
+import { evaluatePreSyncChecklist, type PreSyncChecklistResult } from "@/lib/workflow/pre-sync-checklist";
+import {
+  applySyncSnapshotToInvoice,
+  readSyncSnapshotFromOverrides,
+} from "@/lib/workflow/sync-snapshot";
 
 /**
  * POST /api/documents/sync
@@ -25,6 +31,11 @@ import type { InvoiceExtraction } from "@/lib/gemini/types";
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    const authResult = await verifyAuth(request);
+    if (!authResult.authenticated) {
+      return authResult.response!;
+    }
+
     // Parse request body
     let body: {
       documentIds?: string[];
@@ -63,6 +74,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       qbVendorId?: string;
       dryRun?: boolean;
       billData?: object;
+      checklist?: PreSyncChecklistResult;
     }> = [];
     const errors: Array<{ documentId: string; error: string }> = [];
 
@@ -93,7 +105,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             continue;
           }
 
-          const invoiceData = doc.extraction.data as InvoiceExtraction;
+          const invoiceDataRaw = doc.extraction.data as InvoiceExtraction;
+          const snapshot = readSyncSnapshotFromOverrides(
+            doc.human_overrides as Record<string, unknown> | null | undefined
+          );
+          const invoiceData = snapshot
+            ? applySyncSnapshotToInvoice(invoiceDataRaw, snapshot)
+            : invoiceDataRaw;
+          const checklist = evaluatePreSyncChecklist({
+            syncStatus: doc.sync_status,
+            reviewFlags: doc.review_flags,
+            confidenceScore: doc.confidence_score,
+            extraction: invoiceData,
+            strictEvidence: true,
+          });
+
+          if (!checklist.passed) {
+            errors.push({
+              documentId,
+              error: `Pre-sync checklist failed: ${checklist.errors.join(", ")}`,
+            });
+            continue;
+          }
+
           const validation = canConvertToBill(invoiceData);
 
           if (!validation.valid) {
@@ -116,6 +150,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             documentId,
             dryRun: true,
             billData,
+            checklist,
           });
         } else {
           // Actual sync
