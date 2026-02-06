@@ -74,3 +74,7 @@ Also log non-obvious learnings (e.g., "X library doesn't support Y") to avoid re
 - Don't echo file contents unless asked
 - Keep entries concise: one line per task, one sentence per decision
 - Keep `/docs/ops/drive-management-strategy.md` as the living note for Google Drive AI-management discussions; update it continuously as requirements/decisions evolve.
+- Keep `/docs/ops/founder-todo.md` as the owner reminder checklist.
+- Whenever a critical user-side action is identified, add it to `/docs/ops/founder-todo.md` immediately in simple checkbox format.
+- Keep founder TODO entries concise and readable (short action lines only, no long explanations).
+- When an item is completed, mark it done by checking the same TODO item instead of rewriting history.
