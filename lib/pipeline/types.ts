@@ -25,6 +25,11 @@ export interface ProcessedDocument {
   // OCR layer
   ocrConfidence: number;
   rawText: string;
+  ocrErrorCode?: string;
+  ocrErrorMessage?: string;
+
+  // Timing (milliseconds)
+  timings?: ProcessingTimings;
 
   // Classification layer
   documentType: DocumentType;
@@ -53,6 +58,21 @@ export interface ProcessedDocument {
   // Status
   status: ProcessingStatus;
   error?: string;
+}
+
+// Re-export for convenience
+export interface ProcessingTimings {
+  duplicateCheckMs?: number;
+  ocrMs?: number;
+  classificationMs?: number;
+  extractionMs?: number;
+  evidenceMs?: number;
+  analysisMs?: number;
+  uploadMs?: number;
+  saveMs?: number;
+  layoutMs?: number;
+  embeddingMs?: number;
+  totalMs?: number;
 }
 
 // Re-export for convenience

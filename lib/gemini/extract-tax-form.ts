@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { FieldEvidenceMap } from "./field-evidence";
-import { getGeminiModel, cleanJsonResponse } from "./client";
-import { buildJsonRequest, generateContentWithTimeout } from "./call";
+import { getGeminiModel, parseJsonResponse } from "./client";
+import { generateStructuredJson, StructuredJsonError } from "./structured-json";
 import { taxFormResponseSchema } from "./response-schemas";
 
 // Zod schemas
@@ -71,51 +71,60 @@ function calculateConfidence(data: z.infer<typeof TaxFormResponseSchema>): numbe
 }
 
 function parseResponse(rawResponse: string): z.infer<typeof TaxFormResponseSchema> {
-  const cleaned = cleanJsonResponse(rawResponse);
-  const parsed = JSON.parse(cleaned);
+  const parsed = parseJsonResponse<Record<string, unknown>>(rawResponse);
   return TaxFormResponseSchema.parse(parsed);
 }
 
 export async function extractTaxForm(rawText: string): Promise<TaxFormExtraction> {
   const model = getGeminiModel();
-  const prompt = EXTRACTION_PROMPT + rawText;
+  const prompt = EXTRACTION_PROMPT + rawText.slice(0, 12000);
   let rawResponse = "";
 
   try {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const temperature = attempt === 0 ? 0.2 : 0;
-      const request = buildJsonRequest(prompt, taxFormResponseSchema, {
-        temperature,
-        maxOutputTokens: 1200,
-      });
-      const result = await generateContentWithTimeout(model, request);
-      const response = result.response;
-      rawResponse = response.text();
-      try {
-        const parsed = parseResponse(rawResponse);
+    const { parsed, rawResponse: modelRaw } = await generateStructuredJson({
+      model,
+      prompt,
+      schema: taxFormResponseSchema,
+      label: "tax form extraction",
+      attempts: [
+        { temperature: 0.1, maxOutputTokens: 1200 },
+        {
+          temperature: 0,
+          maxOutputTokens: 1700,
+          promptSuffix:
+            "Return one JSON object only. No preface, no explanation, no markdown.",
+        },
+      ],
+      parser: parseResponse,
+    });
+    rawResponse = modelRaw;
 
-        return {
-          form_type: parsed.form_type ?? null,
-          tax_year: parsed.tax_year ?? null,
-          entity_name: parsed.entity_name ?? null,
-          entity_type: parsed.entity_type ?? null,
-          ein_last4: parsed.ein_last4 ?? null,
-          ssn_last4: parsed.ssn_last4 ?? null,
-          address: parsed.address ?? null,
-          total_income: parsed.total_income ?? null,
-          total_tax: parsed.total_tax ?? null,
-          tax_withheld: parsed.tax_withheld ?? null,
-          refund_or_owed: parsed.refund_or_owed ?? null,
-          confidence: calculateConfidence(parsed),
-          raw_response: rawResponse,
-        };
-      } catch (parseError) {
-        if (attempt === 1) {
-          throw parseError;
-        }
-      }
+    return {
+      form_type: parsed.form_type ?? null,
+      tax_year: parsed.tax_year ?? null,
+      entity_name: parsed.entity_name ?? null,
+      entity_type: parsed.entity_type ?? null,
+      ein_last4: parsed.ein_last4 ?? null,
+      ssn_last4: parsed.ssn_last4 ?? null,
+      address: parsed.address ?? null,
+      total_income: parsed.total_income ?? null,
+      total_tax: parsed.total_tax ?? null,
+      tax_withheld: parsed.tax_withheld ?? null,
+      refund_or_owed: parsed.refund_or_owed ?? null,
+      confidence: calculateConfidence(parsed),
+      raw_response: rawResponse,
+    };
+  } catch (error) {
+    if (error instanceof StructuredJsonError && error.diagnostics?.rawResponse) {
+      rawResponse = error.diagnostics.rawResponse;
     }
-  } catch {
+    if (error instanceof StructuredJsonError && error.diagnostics?.finishReason) {
+      console.warn(
+        `  Tax form extraction finish reason: ${error.diagnostics.finishReason}` +
+          (error.diagnostics.finishMessage ? ` (${error.diagnostics.finishMessage})` : "")
+      );
+    }
+
     return {
       form_type: null,
       tax_year: null,

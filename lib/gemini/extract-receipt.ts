@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { FieldEvidenceMap } from "./field-evidence";
-import { getGeminiModel, cleanJsonResponse } from "./client";
-import { buildJsonRequest, generateContentWithTimeout } from "./call";
+import { getGeminiModel, parseJsonResponse } from "./client";
+import { generateStructuredJson, StructuredJsonError } from "./structured-json";
 import { receiptResponseSchema } from "./response-schemas";
 
 // Zod schemas
@@ -83,48 +83,57 @@ function calculateConfidence(data: z.infer<typeof ReceiptResponseSchema>): numbe
 }
 
 function parseResponse(rawResponse: string): z.infer<typeof ReceiptResponseSchema> {
-  const cleaned = cleanJsonResponse(rawResponse);
-  const parsed = JSON.parse(cleaned);
+  const parsed = parseJsonResponse<Record<string, unknown>>(rawResponse);
   return ReceiptResponseSchema.parse(parsed);
 }
 
 export async function extractReceipt(rawText: string): Promise<ReceiptExtraction> {
   const model = getGeminiModel();
-  const prompt = EXTRACTION_PROMPT + rawText;
+  const prompt = EXTRACTION_PROMPT + rawText.slice(0, 12000);
 
   let rawResponse = "";
   try {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const temperature = attempt === 0 ? 0.2 : 0;
-      const request = buildJsonRequest(prompt, receiptResponseSchema, {
-        temperature,
-        maxOutputTokens: 1200,
-      });
-      const result = await generateContentWithTimeout(model, request);
-      const response = result.response;
-      rawResponse = response.text();
-      try {
-        const parsed = parseResponse(rawResponse);
+    const { parsed, rawResponse: modelRaw } = await generateStructuredJson({
+      model,
+      prompt,
+      schema: receiptResponseSchema,
+      label: "receipt extraction",
+      attempts: [
+        { temperature: 0.1, maxOutputTokens: 1200 },
+        {
+          temperature: 0,
+          maxOutputTokens: 1700,
+          promptSuffix:
+            "Return one JSON object only. No preface, no explanation, no markdown.",
+        },
+      ],
+      parser: parseResponse,
+    });
+    rawResponse = modelRaw;
 
-        return {
-          merchant_name: parsed.merchant_name ?? null,
-          date: parsed.date ?? null,
-          total: parsed.total ?? null,
-          payment_method: parsed.payment_method ?? null,
-          items: parsed.items || [],
-          subtotal: parsed.subtotal ?? null,
-          tax: parsed.tax ?? null,
-          tip: parsed.tip ?? null,
-          confidence: calculateConfidence(parsed),
-          raw_response: rawResponse,
-        };
-      } catch (parseError) {
-        if (attempt === 1) {
-          throw parseError;
-        }
-      }
+    return {
+      merchant_name: parsed.merchant_name ?? null,
+      date: parsed.date ?? null,
+      total: parsed.total ?? null,
+      payment_method: parsed.payment_method ?? null,
+      items: parsed.items || [],
+      subtotal: parsed.subtotal ?? null,
+      tax: parsed.tax ?? null,
+      tip: parsed.tip ?? null,
+      confidence: calculateConfidence(parsed),
+      raw_response: rawResponse,
+    };
+  } catch (error) {
+    if (error instanceof StructuredJsonError && error.diagnostics?.rawResponse) {
+      rawResponse = error.diagnostics.rawResponse;
     }
-  } catch {
+    if (error instanceof StructuredJsonError && error.diagnostics?.finishReason) {
+      console.warn(
+        `  Receipt extraction finish reason: ${error.diagnostics.finishReason}` +
+          (error.diagnostics.finishMessage ? ` (${error.diagnostics.finishMessage})` : "")
+      );
+    }
+
     return {
       merchant_name: null,
       date: null,

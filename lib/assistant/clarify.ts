@@ -965,7 +965,7 @@ function parseCanndidatesFromQuestion(question: string): CandidateDocument[] {
 
     files.forEach((fileName, index) => {
       // Extract amount and date from filename
-      const amountMatch = fileName.match(/\$([0-9,.]+)/);
+      const amountMatch = fileName.match(/(?:\$|USD)([0-9,.]+)/i);
       const dateMatch = fileName.match(/(\d{4}-\d{2}-\d{2})/);
 
       let summary = fileName;

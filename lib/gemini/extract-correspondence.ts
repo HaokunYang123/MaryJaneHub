@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { FieldEvidenceMap } from "./field-evidence";
-import { getGeminiModel, cleanJsonResponse } from "./client";
-import { buildJsonRequest, generateContentWithTimeout } from "./call";
+import { getGeminiModel, parseJsonResponse } from "./client";
+import { generateStructuredJson, StructuredJsonError } from "./structured-json";
 import { correspondenceResponseSchema } from "./response-schemas";
 
 // Zod schemas
@@ -85,50 +85,59 @@ function calculateConfidence(data: z.infer<typeof CorrespondenceResponseSchema>)
 }
 
 function parseResponse(rawResponse: string): z.infer<typeof CorrespondenceResponseSchema> {
-  const cleaned = cleanJsonResponse(rawResponse);
-  const parsed = JSON.parse(cleaned);
+  const parsed = parseJsonResponse<Record<string, unknown>>(rawResponse);
   return CorrespondenceResponseSchema.parse(parsed);
 }
 
 export async function extractCorrespondence(rawText: string): Promise<CorrespondenceExtraction> {
   const model = getGeminiModel();
-  const prompt = EXTRACTION_PROMPT + rawText;
+  const prompt = EXTRACTION_PROMPT + rawText.slice(0, 12000);
   let rawResponse = "";
 
   try {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const temperature = attempt === 0 ? 0.2 : 0;
-      const request = buildJsonRequest(prompt, correspondenceResponseSchema, {
-        temperature,
-        maxOutputTokens: 1200,
-      });
-      const result = await generateContentWithTimeout(model, request);
-      const response = result.response;
-      rawResponse = response.text();
-      try {
-        const parsed = parseResponse(rawResponse);
+    const { parsed, rawResponse: modelRaw } = await generateStructuredJson({
+      model,
+      prompt,
+      schema: correspondenceResponseSchema,
+      label: "correspondence extraction",
+      attempts: [
+        { temperature: 0.1, maxOutputTokens: 1200 },
+        {
+          temperature: 0,
+          maxOutputTokens: 1800,
+          promptSuffix:
+            "Return one JSON object only. No preface, no explanation, no markdown.",
+        },
+      ],
+      parser: parseResponse,
+    });
+    rawResponse = modelRaw;
 
-        return {
-          sender: parsed.sender ?? null,
-          sender_organization: parsed.sender_organization ?? null,
-          recipient: parsed.recipient ?? null,
-          recipient_organization: parsed.recipient_organization ?? null,
-          date: parsed.date ?? null,
-          subject: parsed.subject ?? null,
-          summary: parsed.summary ?? null,
-          correspondence_type: parsed.correspondence_type ?? null,
-          action_items: parsed.action_items || [],
-          urgency: parsed.urgency ?? null,
-          confidence: calculateConfidence(parsed),
-          raw_response: rawResponse,
-        };
-      } catch (parseError) {
-        if (attempt === 1) {
-          throw parseError;
-        }
-      }
+    return {
+      sender: parsed.sender ?? null,
+      sender_organization: parsed.sender_organization ?? null,
+      recipient: parsed.recipient ?? null,
+      recipient_organization: parsed.recipient_organization ?? null,
+      date: parsed.date ?? null,
+      subject: parsed.subject ?? null,
+      summary: parsed.summary ?? null,
+      correspondence_type: parsed.correspondence_type ?? null,
+      action_items: parsed.action_items || [],
+      urgency: parsed.urgency ?? null,
+      confidence: calculateConfidence(parsed),
+      raw_response: rawResponse,
+    };
+  } catch (error) {
+    if (error instanceof StructuredJsonError && error.diagnostics?.rawResponse) {
+      rawResponse = error.diagnostics.rawResponse;
     }
-  } catch {
+    if (error instanceof StructuredJsonError && error.diagnostics?.finishReason) {
+      console.warn(
+        `  Correspondence extraction finish reason: ${error.diagnostics.finishReason}` +
+          (error.diagnostics.finishMessage ? ` (${error.diagnostics.finishMessage})` : "")
+      );
+    }
+
     return {
       sender: null,
       sender_organization: null,

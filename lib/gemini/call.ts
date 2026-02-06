@@ -1,9 +1,17 @@
 import type {
-  GenerativeModel,
-  GenerateContentRequest,
-  GenerationConfig,
-  ResponseSchema,
-} from "@google/generative-ai";
+  GenerateContentConfig,
+  GenerateContentParameters,
+  GenerateContentResponse,
+  Schema,
+} from "@google/genai";
+
+export type GeminiGenerateContentRequest = Omit<GenerateContentParameters, "model">;
+export type GeminiModel = {
+  generateContent: (
+    input: GeminiGenerateContentRequest,
+    options?: { signal?: AbortSignal }
+  ) => Promise<{ response: GenerateContentResponse }>;
+};
 
 export type GeminiTimeoutError = Error & { code: "GEMINI_TIMEOUT" };
 
@@ -69,8 +77,8 @@ async function sleep(ms: number): Promise<void> {
 }
 
 export async function generateContentWithTimeout(
-  model: GenerativeModel,
-  promptOrRequest: string | GenerateContentRequest
+  model: GeminiModel,
+  promptOrRequest: string | GeminiGenerateContentRequest
 ) {
   const retries = resolveRetryMax();
   const timeoutMs = resolveTimeoutMs();
@@ -93,10 +101,17 @@ export async function generateContentWithTimeout(
 
     const modelCall = (model as unknown as {
       generateContent: (
-        input: string | GenerateContentRequest,
+        input: GeminiGenerateContentRequest,
         options?: { signal?: AbortSignal }
       ) => Promise<unknown>;
-    }).generateContent(promptOrRequest, { signal: controller.signal });
+    }).generateContent(
+      typeof promptOrRequest === "string"
+        ? {
+            contents: [{ role: "user", parts: [{ text: promptOrRequest }] }],
+          }
+        : promptOrRequest,
+      { signal: controller.signal }
+    );
 
     try {
       return await Promise.race([modelCall, timeoutPromise]);
@@ -119,12 +134,12 @@ export const JSON_RESPONSE_MIME = "application/json";
 
 export function buildJsonRequest(
   prompt: string,
-  schema: ResponseSchema,
-  overrides: Partial<GenerationConfig> = {}
-): GenerateContentRequest {
+  schema: Schema,
+  overrides: Partial<GenerateContentConfig> = {}
+): GeminiGenerateContentRequest {
   return {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
+    config: {
       responseMimeType: JSON_RESPONSE_MIME,
       responseSchema: schema,
       ...overrides,

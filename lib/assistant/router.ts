@@ -188,7 +188,10 @@ Respond with JSON only:
 
   try {
     const result = await generateContentWithTimeout(model, prompt);
-    const responseText = result.response.text();
+    const responseText =
+      typeof result.response.text === "function"
+        ? result.response.text()
+        : (result.response.text ?? "");
 
     // Clean and parse JSON
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);

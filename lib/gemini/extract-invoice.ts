@@ -3,9 +3,11 @@ import type {
   LineItem,
   GeminiInvoiceResponse,
 } from "./types";
-import { getGeminiModel, cleanJsonResponse } from "./client";
-import { buildJsonRequest, generateContentWithTimeout } from "./call";
+import { getGeminiModel, parseJsonResponse } from "./client";
+import { generateStructuredJson, StructuredJsonError } from "./structured-json";
 import { invoiceResponseSchema } from "./response-schemas";
+
+const MAX_LINE_ITEMS = 30;
 
 const EXTRACTION_PROMPT = `You are an invoice data extraction assistant. Extract structured data from the following invoice text.
 
@@ -14,7 +16,9 @@ IMPORTANT INSTRUCTIONS:
 2. Use null for any fields you cannot find or are uncertain about
 3. Parse dates into ISO format (YYYY-MM-DD)
 4. Parse currency values into numbers (remove $, commas, currency symbols)
-5. For line items, extract as many as you can find
+5. For line items, return at most ${MAX_LINE_ITEMS} items in order; if more exist, include only the first ${MAX_LINE_ITEMS}
+6. If line items are too long or unclear, return an empty array rather than partial or broken JSON
+7. Do not include any additional keys
 
 Return this exact JSON structure:
 {
@@ -69,8 +73,7 @@ function calculateConfidence(data: GeminiInvoiceResponse): number {
  * Parse and validate the Gemini response into typed structure
  */
 function parseResponse(rawResponse: string): GeminiInvoiceResponse {
-  const cleaned = cleanJsonResponse(rawResponse);
-  return JSON.parse(cleaned) as GeminiInvoiceResponse;
+  return parseJsonResponse<GeminiInvoiceResponse>(rawResponse);
 }
 
 /**
@@ -83,7 +86,7 @@ function normalizeLineItems(
     return [];
   }
 
-  return items.map((item) => ({
+  return items.slice(0, MAX_LINE_ITEMS).map((item) => ({
     description: item.description || "",
     quantity: item.quantity ?? null,
     unit_price: item.unit_price ?? null,
@@ -101,41 +104,57 @@ export async function extractInvoiceWithGemini(
   rawText: string
 ): Promise<InvoiceExtraction> {
   const model = getGeminiModel();
-  const prompt = EXTRACTION_PROMPT + rawText;
+  const prompt = EXTRACTION_PROMPT + rawText.slice(0, 12000);
 
   let rawResponse = "";
   try {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const temperature = attempt === 0 ? 0.2 : 0;
-      const request = buildJsonRequest(prompt, invoiceResponseSchema, {
-        temperature,
-        maxOutputTokens: 1200,
-      });
-      const result = await generateContentWithTimeout(model, request);
-      const response = result.response;
-      rawResponse = response.text();
-      try {
-        const parsed = parseResponse(rawResponse);
+    const { parsed, rawResponse: modelRaw } = await generateStructuredJson({
+      model,
+      prompt,
+      schema: invoiceResponseSchema,
+      label: "invoice extraction",
+      attempts: [
+        { temperature: 0.1, maxOutputTokens: 1200 },
+        {
+          temperature: 0,
+          maxOutputTokens: 1500,
+          promptSuffix:
+            "Return one JSON object only. No preface, no explanation, no markdown.",
+        },
+        {
+          temperature: 0,
+          maxOutputTokens: 900,
+          promptSuffix:
+            "Return one JSON object only. If line_items could exceed limits, set line_items to [].",
+        },
+      ],
+      parser: parseResponse,
+    });
+    rawResponse = modelRaw;
 
-        return {
-          vendor: parsed.vendor ?? null,
-          invoice_number: parsed.invoice_number ?? null,
-          invoice_date: parsed.invoice_date ?? null,
-          due_date: parsed.due_date ?? null,
-          subtotal: parsed.subtotal ?? null,
-          tax: parsed.tax ?? null,
-          total: parsed.total ?? null,
-          line_items: normalizeLineItems(parsed.line_items),
-          confidence: calculateConfidence(parsed),
-          raw_response: rawResponse,
-        };
-      } catch (parseError) {
-        if (attempt === 1) {
-          throw parseError;
-        }
-      }
+    return {
+      vendor: parsed.vendor ?? null,
+      invoice_number: parsed.invoice_number ?? null,
+      invoice_date: parsed.invoice_date ?? null,
+      due_date: parsed.due_date ?? null,
+      subtotal: parsed.subtotal ?? null,
+      tax: parsed.tax ?? null,
+      total: parsed.total ?? null,
+      line_items: normalizeLineItems(parsed.line_items),
+      confidence: calculateConfidence(parsed),
+      raw_response: rawResponse,
+    };
+  } catch (error) {
+    if (error instanceof StructuredJsonError && error.diagnostics?.rawResponse) {
+      rawResponse = error.diagnostics.rawResponse;
     }
-  } catch {
+    if (error instanceof StructuredJsonError && error.diagnostics?.finishReason) {
+      console.warn(
+        `  Invoice extraction finish reason: ${error.diagnostics.finishReason}` +
+          (error.diagnostics.finishMessage ? ` (${error.diagnostics.finishMessage})` : "")
+      );
+    }
+
     // Return a failed extraction with the raw response for debugging
     return {
       vendor: null,

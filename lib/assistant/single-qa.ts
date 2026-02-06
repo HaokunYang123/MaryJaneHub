@@ -243,7 +243,10 @@ Provide your answer with quoted evidence from the document.`;
 
   try {
     const result = await generateContentWithTimeout(model, prompt);
-    const responseText = result.response.text();
+    const responseText =
+      typeof result.response.text === "function"
+        ? result.response.text()
+        : (result.response.text ?? "");
     return { answer: responseText, rawResponse: responseText };
   } catch (error) {
     console.error("[SingleQA] Gemini error:", error);

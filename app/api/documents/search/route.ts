@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchDocuments, hybridSearchDocuments } from "@/lib/search/semantic-search";
 import type { DocumentType } from "@/lib/gemini/document-types";
 import { verifyAuth } from "@/lib/auth/api-middleware";
+import { buildSearchHighlight, type SearchHighlight } from "@/lib/search/highlight";
+import { getDocumentLayout } from "@/lib/supabase/document-layouts";
 
 /**
  * GET /api/documents/search
@@ -13,6 +15,8 @@ import { verifyAuth } from "@/lib/auth/api-middleware";
  * - mode: Search mode - "hybrid" or "vector" (default: "hybrid")
  * - limit: Max results (default: 10, max: 50)
  * - type: Filter by document type (optional)
+ * - includeHighlight: Include highlight snippet (default: false)
+ * - includeLocation: Include page/coords for highlight (default: false, implies includeHighlight)
  *
  * Vector mode only:
  * - threshold: Similarity threshold 0-1 (default: 0.7)
@@ -83,6 +87,32 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const includeHighlightParam = searchParams.get("includeHighlight");
+  const includeLocationParam = searchParams.get("includeLocation");
+  const includeLocation = includeLocationParam === "true";
+  const includeHighlight = includeLocation || includeHighlightParam === "true";
+
+  async function enrichResults<T extends { id: string; rawText: string | null }>(
+    results: T[]
+  ): Promise<Array<T & { highlight: SearchHighlight }>> {
+    if (!includeHighlight) return results as Array<T & { highlight: SearchHighlight }>;
+
+    return Promise.all(
+      results.map(async (result) => {
+        let layout;
+        if (includeLocation && result.rawText) {
+          try {
+            layout = (await getDocumentLayout(result.id))?.layout;
+          } catch {
+            layout = undefined;
+          }
+        }
+        const highlight = buildSearchHighlight(query, result.rawText, layout);
+        return { ...result, highlight };
+      })
+    );
+  }
+
   try {
     if (mode === "hybrid") {
       // Parse hybrid-specific params
@@ -140,11 +170,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         );
       }
 
+      const results = await enrichResults(result.results);
+
       return NextResponse.json({
         success: true,
         data: {
           mode: "hybrid",
-          results: result.results,
+          results,
           query: result.query,
           options: result.options,
           processingTimeMs: result.processingTimeMs,
@@ -178,11 +210,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         );
       }
 
+      const results = await enrichResults(result.results);
+
       return NextResponse.json({
         success: true,
         data: {
           mode: "vector",
-          results: result.results,
+          results,
           query: result.query,
           options: result.options,
           processingTimeMs: result.processingTimeMs,

@@ -39,13 +39,13 @@ function sanitizeForFilename(str: string, maxLength = 30): string {
 
 /**
  * Format a number as currency string for filename
- * Example: 93.5 -> "$93.50"
+ * Example: 93.5 -> "USD93.50"
  */
 function formatAmountForFilename(amount: number | null | undefined): string {
   if (amount === null || amount === undefined || isNaN(amount)) {
     return "";
   }
-  return `$${amount.toFixed(2)}`;
+  return `USD${amount.toFixed(2)}`;
 }
 
 /**
@@ -97,6 +97,7 @@ function getFilenameInfo(extraction: DocumentExtraction): {
   name: string | null;
   date: string | null;
   amount: number | null;
+  reference: string | null; // Invoice number, account suffix, form type, etc.
   extraInfo: string | null; // For additional context (e.g., period for bank statements)
 } {
   switch (extraction.type) {
@@ -106,6 +107,7 @@ function getFilenameInfo(extraction: DocumentExtraction): {
         name: d.vendor,
         date: d.invoice_date,
         amount: d.total,
+        reference: d.invoice_number ? sanitizeForFilename(d.invoice_number, 20) : null,
         extraInfo: null,
       };
     }
@@ -121,6 +123,7 @@ function getFilenameInfo(extraction: DocumentExtraction): {
         name: d.merchant_name || d.vendor || null,
         date: d.date || d.invoice_date || null,
         amount: d.total ?? null,
+        reference: null,
         extraInfo: null,
       };
     }
@@ -139,6 +142,9 @@ function getFilenameInfo(extraction: DocumentExtraction): {
         name: d.bank_name,
         date: d.statement_period_end,
         amount: null, // Don't show balance in filename
+        reference: d.account_number_last4
+          ? sanitizeForFilename(`ACCT${d.account_number_last4}`, 12)
+          : null,
         extraInfo: periodInfo,
       };
     }
@@ -148,6 +154,7 @@ function getFilenameInfo(extraction: DocumentExtraction): {
         name: d.parties?.[0]?.name || null,
         date: d.effective_date,
         amount: null, // Don't show contract value in filename
+        reference: null,
         extraInfo: null,
       };
     }
@@ -159,7 +166,8 @@ function getFilenameInfo(extraction: DocumentExtraction): {
         name: d.entity_name,
         date: d.tax_year ? `${d.tax_year}-01-01` : null,
         amount: null, // Don't show income in filename
-        extraInfo: formType,
+        reference: formType,
+        extraInfo: null,
       };
     }
     case "correspondence": {
@@ -168,6 +176,7 @@ function getFilenameInfo(extraction: DocumentExtraction): {
         name: d.sender_organization || d.sender,
         date: d.date,
         amount: null,
+        reference: null,
         extraInfo: null,
       };
     }
@@ -178,6 +187,7 @@ function getFilenameInfo(extraction: DocumentExtraction): {
         name: d.vendor,
         date: d.invoice_date,
         amount: d.total,
+        reference: d.invoice_number ? sanitizeForFilename(d.invoice_number, 20) : null,
         extraInfo: null,
       };
     }
@@ -187,14 +197,14 @@ function getFilenameInfo(extraction: DocumentExtraction): {
 /**
  * Generate a clean, descriptive filename from document extraction
  *
- * Format: DATE_TYPE_VENDOR_AMOUNT.ext
+ * Format: DATE_TYPE_VENDOR_REFERENCE_EXTRA_AMOUNT.ext
  *
  * Examples:
- * - Receipt:        2019-05-03_RECEIPT_Primo_Family_Restaurant_$52.47.jpg
- * - Invoice:        2026-01-15_INVOICE_CoolAir_HVAC_Services_$400.00.pdf
+ * - Receipt:        2019-05-03_RECEIPT_Primo_Family_Restaurant_USD52.47.jpg
+ * - Invoice:        2026-01-15_INVOICE_CoolAir_HVAC_Services_INV2048_USD400.00.pdf
  * - Contract:       2024-03-15_CONTRACT_ABC_Property_LLC.pdf
- * - Bank Statement: 2024-01-31_BANK-STMT_Chase_Business_Jan2024.pdf
- * - Tax Form:       2024-02-15_TAX-FORM_W2_Acme_Corp.pdf
+ * - Bank Statement: 2024-01-31_BANK-STMT_Chase_Business_ACCT9876_Jan2024.pdf
+ * - Tax Form:       2024-02-15_TAX-FORM_Acme_Corp_W2.pdf
  * - Correspondence: 2024-06-01_CORRESPONDENCE_IRS_Notice.pdf
  * - Unknown:        2024-06-01_DOC_Unknown_Vendor.pdf
  *
@@ -225,6 +235,11 @@ export function generateCleanFilename(
 
   // Build filename parts
   const parts: string[] = [dateStr, typePrefix, name];
+
+  // Add stable references where available (invoice number, account suffix, form type)
+  if (info.reference) {
+    parts.push(info.reference);
+  }
 
   // Add extra info if available (e.g., period for bank statements, form type for tax)
   if (info.extraInfo) {
@@ -266,3 +281,15 @@ export function makeFilenameUnique(
   return newName;
 }
 
+/**
+ * Append _NEEDS_REVIEW before the extension (deduped).
+ */
+export function appendNeedsReviewSuffix(filename: string): string {
+  const extension = getExtension(filename);
+  const baseName = filename.slice(0, -extension.length);
+  const normalizedBase = baseName.replace(/(_NEEDS_REVIEW)+$/g, "_NEEDS_REVIEW");
+  const finalBase = normalizedBase.endsWith("_NEEDS_REVIEW")
+    ? normalizedBase
+    : `${normalizedBase}_NEEDS_REVIEW`;
+  return `${finalBase}${extension}`;
+}

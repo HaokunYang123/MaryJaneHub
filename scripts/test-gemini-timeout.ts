@@ -6,7 +6,9 @@
 import { generateContentWithTimeout } from "../lib/gemini/call";
 
 type StubModel = {
-  generateContent: (prompt: string) => Promise<{ response: { text: () => string } }>;
+  generateContent: (
+    prompt: { contents: Array<{ role: string; parts: Array<{ text: string }> }> }
+  ) => Promise<{ response: { text?: string | (() => string) } }>;
 };
 
 function delay(ms: number): Promise<void> {
@@ -39,12 +41,13 @@ async function run(): Promise<void> {
     const okModel: StubModel = {
       generateContent: async () => {
         await delay(10);
-        return { response: { text: () => "ok" } };
+        return { response: { text: "ok" } };
       },
     };
 
     const result = await generateContentWithTimeout(okModel as never, "test");
-    const text = (result as { response: { text: () => string } }).response.text();
+    const textField = (result as { response: { text?: string | (() => string) } }).response.text;
+    const text = typeof textField === "function" ? textField() : textField;
     if (text !== "ok") {
       failures.push(`expected response text "ok", got "${text}"`);
     }

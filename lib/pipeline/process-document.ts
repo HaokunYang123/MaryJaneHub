@@ -1,18 +1,65 @@
 import { createHash } from "crypto";
+import { performance } from "perf_hooks";
 import { extractWithDocumentAI } from "../document-ai/ocr";
 import { classifyDocument } from "../gemini/classify-document";
 import { validateClassification } from "../gemini/validate-classification";
 import { extractDocument, type DocumentExtraction } from "../gemini/extract-document";
+import { extractKeyFields } from "../gemini/extract-key-fields";
 import { uploadToGCS } from "../gcs/upload";
 import { saveDocument, getDocumentByHash } from "../supabase/documents";
 import { analyzeDocument, type SyncStatus, type ReviewFlag } from "../workflow/review-flags";
 import { ensureFieldEvidence } from "../workflow/field-evidence";
 import type { FieldEvidenceMap } from "../gemini/field-evidence";
 import { generateAndStoreEmbedding } from "../search/semantic-search";
-import type { ProcessedDocument } from "./types";
+import type { ProcessedDocument, ProcessingTimings } from "./types";
 import type { DocumentType } from "../gemini/document-types";
 import { upsertDocumentLayout } from "../supabase/document-layouts";
 import type { DocumentLayout } from "../document-ai/types";
+
+function isEmptyValue(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value === "string") return value.trim().length === 0;
+  if (Array.isArray(value)) return value.length === 0;
+  return false;
+}
+
+function mergeFallbackData<T extends Record<string, unknown>>(
+  base: T,
+  fallback: Record<string, unknown>
+): T {
+  const merged = { ...base };
+  for (const [key, value] of Object.entries(fallback)) {
+    if (isEmptyValue(merged[key]) && !isEmptyValue(value)) {
+      merged[key] = value as T[keyof T];
+    }
+  }
+  return merged;
+}
+
+function shouldFallback(documentType: DocumentType, extraction: DocumentExtraction): boolean {
+  const confidence = extraction.data.confidence ?? 0;
+  const data = extraction.data as Record<string, unknown>;
+
+  const missing = (...fields: string[]) => fields.some((field) => isEmptyValue(data[field]));
+
+  switch (documentType) {
+    case "invoice":
+    case "other":
+      return confidence < 0.6 || missing("vendor", "invoice_date", "total");
+    case "receipt":
+      return confidence < 0.6 || missing("merchant_name", "date", "total");
+    case "bank_statement":
+      return confidence < 0.6 || missing("bank_name", "statement_period_end");
+    case "contract":
+      return confidence < 0.5 || missing("parties", "effective_date");
+    case "tax_form":
+      return confidence < 0.6 || missing("form_type", "tax_year");
+    case "correspondence":
+      return confidence < 0.6 || missing("sender", "subject", "date");
+    default:
+      return confidence < 0.6;
+  }
+}
 
 /**
  * Generate SHA256 hash of a buffer
@@ -164,17 +211,23 @@ export async function processDocument(
   fileName: string,
   options: { skipDuplicateCheck?: boolean; skipEmbedding?: boolean } = {}
 ): Promise<ProcessedDocument> {
+  const timings: ProcessingTimings = {};
+  const totalStart = performance.now();
   const fileHash = generateFileHash(fileBuffer);
   const processedAt = new Date().toISOString();
 
   // Track errors for recording
   const processingErrors: string[] = [];
   let partialFailure = false;
+  let ocrErrorCode: string | undefined;
+  let ocrErrorMessage: string | undefined;
 
   // Step 0: Check for duplicate (by file hash)
   if (!options.skipDuplicateCheck) {
+    const duplicateStart = performance.now();
     try {
       const existingDoc = await getDocumentByHash(fileHash);
+      timings.duplicateCheckMs = performance.now() - duplicateStart;
       if (existingDoc) {
         console.log(`  Duplicate detected: Document already exists (ID: ${existingDoc.id})`);
         return {
@@ -198,17 +251,24 @@ export async function processDocument(
           gcsHashValue: existingDoc.gcs_hash_value || undefined,
           gcsRetentionStatus: existingDoc.gcs_retention_status || undefined,
           status: "duplicate",
+          timings: {
+            ...timings,
+            totalMs: performance.now() - totalStart,
+          },
         };
       }
     } catch (err) {
       // Non-blocking: if duplicate check fails, continue processing
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       console.warn(`  Duplicate check warning: ${errorMessage}`);
+      timings.duplicateCheckMs = performance.now() - duplicateStart;
     }
   }
 
   // Step 1: OCR with Document AI
+  const ocrStart = performance.now();
   const ocrResult = await extractWithDocumentAI(fileBuffer, mimeType);
+  timings.ocrMs = performance.now() - ocrStart;
   let rawText = "";
   let ocrConfidence = 0;
   let layout: DocumentLayout | undefined;
@@ -218,6 +278,8 @@ export async function processDocument(
     processingErrors.push(ocrError);
     console.warn(`  ${ocrError}`);
     partialFailure = true;
+    ocrErrorCode = ocrResult.error.code;
+    ocrErrorMessage = ocrResult.error.message;
     // Continue - we'll save what we can
   } else {
     rawText = ocrResult.rawText;
@@ -231,7 +293,9 @@ export async function processDocument(
 
   if (rawText) {
     try {
+      const classifyStart = performance.now();
       const classification = await classifyDocument(rawText);
+      timings.classificationMs = performance.now() - classifyStart;
       documentType = classification.documentType;
       classificationConfidence = classification.confidence;
       console.log(`  Classification: ${documentType} (${(classificationConfidence * 100).toFixed(0)}% confidence)`);
@@ -248,6 +312,9 @@ export async function processDocument(
       processingErrors.push(`Classification failed: ${errorMessage}`);
       console.warn(`  Classification warning: ${errorMessage}`);
       // Continue with 'other' type
+      if (timings.classificationMs === undefined) {
+        timings.classificationMs = 0;
+      }
     }
   }
 
@@ -256,6 +323,7 @@ export async function processDocument(
   let extractionFailed = false;
 
   if (rawText) {
+    const extractionStart = performance.now();
     try {
       extraction = await extractDocument(documentType, rawText);
       console.log(`  Extraction: ${extraction.type} (${(extraction.data.confidence * 100).toFixed(0)}% confidence)`);
@@ -283,6 +351,7 @@ export async function processDocument(
           partialFailure = true;
         }
       }
+      timings.extractionMs = performance.now() - extractionStart;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown extraction error";
       processingErrors.push(`Extraction failed: ${errorMessage}`);
@@ -290,14 +359,39 @@ export async function processDocument(
       extractionFailed = true;
       partialFailure = true;
       // Keep empty extraction - we'll still save
+      timings.extractionMs = performance.now() - extractionStart;
     }
   } else {
     extractionFailed = true;
     partialFailure = true;
   }
 
+  // Step 3b: Key-field fallback for low-confidence or missing essentials
+  if (rawText && shouldFallback(documentType, extraction)) {
+    try {
+      const fallbackStart = performance.now();
+      const fallback = await extractKeyFields(documentType, rawText);
+      const currentData = extraction.data as Record<string, unknown>;
+      const mergedData = mergeFallbackData(currentData, fallback.data);
+      extraction.data = mergedData as typeof extraction.data;
+      const currentConfidence = typeof extraction.data.confidence === "number" ? extraction.data.confidence : 0;
+      if (fallback.confidence > currentConfidence) {
+        extraction.data.confidence = fallback.confidence;
+      }
+      timings.extractionMs = (timings.extractionMs ?? 0) + (performance.now() - fallbackStart);
+      if (extractionFailed && extraction.data.confidence > 0) {
+        extractionFailed = false;
+      }
+    } catch (fallbackError) {
+      const message = fallbackError instanceof Error ? fallbackError.message : "Unknown fallback error";
+      processingErrors.push(`Key-field fallback failed: ${message}`);
+      console.warn(`  Key-field fallback warning: ${message}`);
+    }
+  }
+
   // Attach per-field evidence to extraction (value + confidence + evidence)
   try {
+    const evidenceStart = performance.now();
     const existingEvidence = (extraction.data as Record<string, unknown>)
       ?.field_evidence as FieldEvidenceMap | undefined;
     extraction.data.field_evidence = ensureFieldEvidence(
@@ -306,9 +400,13 @@ export async function processDocument(
       existingEvidence,
       layout
     );
+    timings.evidenceMs = performance.now() - evidenceStart;
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown evidence error";
     console.warn(`  Field evidence warning: ${errorMessage}`);
+    if (timings.evidenceMs === undefined) {
+      timings.evidenceMs = 0;
+    }
   }
 
   // Step 4: Analyze document for review workflow
@@ -327,7 +425,9 @@ export async function processDocument(
     reviewFlags.push("low_confidence");
   } else if (documentType === "invoice" || documentType === "other") {
     // Normal workflow for invoices
+    const analysisStart = performance.now();
     const analysis = analyzeDocument(extraction);
+    timings.analysisMs = performance.now() - analysisStart;
     syncStatus = analysis.suggestedStatus;
     reviewFlags = analysis.flags;
     confidenceScore = analysis.confidenceScore;
@@ -347,7 +447,9 @@ export async function processDocument(
   let gcsHashValue: string | undefined;
   let gcsRetentionStatus: "confirmed" | "unconfirmed" | undefined;
   try {
+    const uploadStart = performance.now();
     const gcsResult = await uploadToGCS(fileBuffer, fileName, fileHash, mimeType);
+    timings.uploadMs = performance.now() - uploadStart;
     if (gcsResult.success) {
       gcsPath = gcsResult.gcsPath;
       gcsBucket = gcsResult.gcsBucket;
@@ -371,6 +473,7 @@ export async function processDocument(
   // Step 6: Save to Supabase - ALWAYS save, even on partial failure
   let documentId: string | undefined;
   try {
+    const saveStart = performance.now();
     const saveResult = await saveDocument({
       fileName,
       fileHash,
@@ -391,6 +494,7 @@ export async function processDocument(
       confidenceScore,
       reviewFlags,
     });
+    timings.saveMs = performance.now() - saveStart;
     if (saveResult.success) {
       documentId = saveResult.documentId;
       if (saveResult.alreadyExists) {
@@ -407,10 +511,12 @@ export async function processDocument(
   // Step 6b: Persist OCR layout (non-blocking on failure)
   if (documentId && layout) {
     try {
+      const layoutStart = performance.now();
       const layoutResult = await upsertDocumentLayout({
         documentId,
         layout,
       });
+      timings.layoutMs = performance.now() - layoutStart;
       if (!layoutResult.success) {
         processingErrors.push(`Layout save failed: ${layoutResult.error}`);
         partialFailure = true;
@@ -427,11 +533,13 @@ export async function processDocument(
   // Step 7: Generate embedding for semantic search (only if we have text)
   if (!options.skipEmbedding && documentId && rawText) {
     try {
+      const embeddingStart = performance.now();
       const embeddingResult = await generateAndStoreEmbedding(documentId, {
         document_type: documentType,
         raw_text: rawText,
         extraction,
       });
+      timings.embeddingMs = performance.now() - embeddingStart;
       if (embeddingResult.success) {
         console.log(`  Embedding generated (${embeddingResult.processingTimeMs}ms)`);
       } else {
@@ -461,6 +569,8 @@ export async function processDocument(
     processedAt,
     ocrConfidence,
     rawText,
+    ocrErrorCode,
+    ocrErrorMessage,
     documentType,
     classificationConfidence,
     extraction,
@@ -476,5 +586,9 @@ export async function processDocument(
     reviewFlags,
     status: finalStatus,
     error: processingErrors.length > 0 ? processingErrors.join("; ") : undefined,
+    timings: {
+      ...timings,
+      totalMs: performance.now() - totalStart,
+    },
   };
 }

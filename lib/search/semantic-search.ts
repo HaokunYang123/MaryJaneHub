@@ -10,6 +10,7 @@ import { generateEmbedding, generateEmbeddingText, EMBEDDING_MODEL } from "../ge
 import { createHash } from "crypto";
 import type { DocumentType } from "../gemini/document-types";
 import type { DocumentExtraction } from "../gemini/extract-document";
+import type { SearchHighlight } from "./highlight";
 
 export interface SearchOptions {
   /** Minimum similarity threshold (0-1, default: 0.7) */
@@ -41,6 +42,7 @@ export interface SearchResult {
   rawText: string | null;
   extraction: Record<string, unknown>;
   createdAt: string;
+  highlight?: SearchHighlight;
 }
 
 export interface HybridSearchResult {
@@ -53,6 +55,7 @@ export interface HybridSearchResult {
   rawText: string | null;
   extraction: Record<string, unknown>;
   createdAt: string;
+  highlight?: SearchHighlight;
 }
 
 export interface SearchResponse {

@@ -32,6 +32,53 @@ function printResult(label: string, success: boolean, details?: string) {
   console.log(`  ${icon} ${label}${details ? `: ${details}` : ""}`);
 }
 
+function printSkip(label: string, details?: string) {
+  console.log(`  - ${label}${details ? `: ${details}` : ""} (skipped)`);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isSortedDescending(values: number[]): boolean {
+  for (let i = 1; i < values.length; i++) {
+    if (values[i] > values[i - 1]) return false;
+  }
+  return true;
+}
+
+const STOP_WORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "from",
+  "that",
+  "this",
+  "have",
+  "your",
+  "you",
+  "are",
+  "was",
+  "were",
+  "invoice",
+  "receipt",
+  "statement",
+  "document",
+  "total",
+  "amount",
+  "date",
+]);
+
+function selectKeyword(rawText: string): string | null {
+  const tokens = rawText
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length >= 5 && !STOP_WORDS.has(token));
+  return tokens[0] ?? null;
+}
+
 async function testEmbeddingGeneration() {
   printSection("Test 1: Embedding Generation");
 
@@ -439,6 +486,228 @@ async function testHybridVsVectorComparison() {
   return true;
 }
 
+async function testResultInvariants() {
+  printSection("Test 9: Result Invariants");
+
+  const query = "invoice";
+  const limit = 3;
+
+  const result = await searchDocuments(query, {
+    limit,
+    threshold: 0.3,
+  });
+
+  if (!result.success) {
+    printResult("Search executed", false, result.error);
+    return false;
+  }
+
+  printResult(
+    "Search executed",
+    true,
+    `${result.results.length} results in ${result.processingTimeMs}ms`
+  );
+
+  if (result.results.length === 0) {
+    printSkip("Result invariants", "no results");
+    return true;
+  }
+
+  const limitOk = result.results.length <= limit;
+  printResult("Respects limit", limitOk, `${result.results.length} <= ${limit}`);
+
+  const requiredFieldsOk = result.results.every((r) => r.id && r.fileName);
+  printResult("Required fields present", requiredFieldsOk);
+
+  const similarityBoundsOk = result.results.every(
+    (r) => isFiniteNumber(r.similarity) && r.similarity >= 0 && r.similarity <= 1
+  );
+  printResult("Similarity within [0,1]", similarityBoundsOk);
+
+  const createdAtOk = result.results.every((r) => !Number.isNaN(Date.parse(r.createdAt)));
+  printResult("createdAt is parseable", createdAtOk);
+
+  return limitOk && requiredFieldsOk && similarityBoundsOk && createdAtOk;
+}
+
+async function testHybridScoreBounds() {
+  printSection("Test 10: Hybrid Score Bounds");
+
+  const query = "invoice";
+  const result = await hybridSearchDocuments(query, {
+    limit: 5,
+    minScore: 0.1,
+  });
+
+  if (!result.success) {
+    printResult("Hybrid search executed", false, result.error);
+    return false;
+  }
+
+  printResult(
+    "Hybrid search executed",
+    true,
+    `${result.results.length} results in ${result.processingTimeMs}ms`
+  );
+
+  if (result.results.length === 0) {
+    printSkip("Hybrid score bounds", "no results");
+    return true;
+  }
+
+  const scoreBoundsOk = result.results.every(
+    (r) =>
+      isFiniteNumber(r.score) &&
+      isFiniteNumber(r.vectorScore) &&
+      isFiniteNumber(r.keywordScore) &&
+      r.score >= 0 &&
+      r.score <= 1 &&
+      r.vectorScore >= 0 &&
+      r.vectorScore <= 1 &&
+      r.keywordScore >= 0 &&
+      r.keywordScore <= 1
+  );
+
+  printResult("Scores within [0,1]", scoreBoundsOk);
+  return scoreBoundsOk;
+}
+
+async function testHybridOrdering() {
+  printSection("Test 11: Hybrid Ordering");
+
+  const result = await hybridSearchDocuments("invoice", {
+    limit: 10,
+    minScore: 0.2,
+  });
+
+  if (!result.success) {
+    printResult("Hybrid search executed", false, result.error);
+    return false;
+  }
+
+  printResult(
+    "Hybrid search executed",
+    true,
+    `${result.results.length} results in ${result.processingTimeMs}ms`
+  );
+
+  if (result.results.length < 2) {
+    printSkip("Hybrid ordering", "not enough results");
+    return true;
+  }
+
+  const scores = result.results.map((r) => r.score);
+  const ordered = isSortedDescending(scores);
+  printResult("Results ordered by score (descending)", ordered);
+  return ordered;
+}
+
+async function testHybridScoreFormula() {
+  printSection("Test 12: Hybrid Score Formula");
+
+  const vectorWeight = 0.6;
+  const keywordWeight = 0.4;
+  const epsilon = 1e-3;
+
+  const result = await hybridSearchDocuments("invoice", {
+    limit: 10,
+    minScore: 0.1,
+    vectorWeight,
+    keywordWeight,
+  });
+
+  if (!result.success) {
+    printResult("Hybrid search executed", false, result.error);
+    return false;
+  }
+
+  printResult(
+    "Hybrid search executed",
+    true,
+    `${result.results.length} results in ${result.processingTimeMs}ms`
+  );
+
+  if (result.results.length === 0) {
+    printSkip("Score formula", "no results");
+    return true;
+  }
+
+  const formulaOk = result.results.every((r) => {
+    const expected = r.vectorScore * vectorWeight + r.keywordScore * keywordWeight;
+    return Math.abs(r.score - expected) <= epsilon;
+  });
+
+  printResult("Score matches weighted sum", formulaOk, `epsilon=${epsilon}`);
+  return formulaOk;
+}
+
+async function testHybridKeywordBoostFromResult() {
+  printSection("Test 13: Keyword Boost From Result Text");
+
+  const seed = await searchDocuments("invoice", {
+    limit: 5,
+    threshold: 0.1,
+  });
+
+  if (!seed.success) {
+    printResult("Seed vector search executed", false, seed.error);
+    return false;
+  }
+
+  const candidate = seed.results.find((r) => typeof r.rawText === "string" && r.rawText.length > 0);
+  if (!candidate || !candidate.rawText) {
+    printSkip("Keyword boost", "no raw text available");
+    return true;
+  }
+
+  const keyword = selectKeyword(candidate.rawText);
+  if (!keyword) {
+    printSkip("Keyword boost", "no suitable keyword found");
+    return true;
+  }
+
+  console.log(`  Using keyword: "${keyword}"`);
+
+  const result = await hybridSearchDocuments(keyword, {
+    limit: 10,
+    minScore: 0.1,
+  });
+
+  if (!result.success) {
+    printResult("Hybrid search executed", false, result.error);
+    return false;
+  }
+
+  const matched = result.results.find((r) => r.id === candidate.id);
+  if (!matched) {
+    printSkip("Keyword boost", "seed doc not returned for keyword search");
+    return true;
+  }
+
+  const boosted = matched.keywordScore > 0;
+  printResult("Seed doc has keyword score > 0", boosted);
+  return boosted;
+}
+
+async function testErrorHandling() {
+  printSection("Test 14: Error Handling");
+
+  const emptyQuery = "   ";
+  const vectorEmpty = await searchDocuments(emptyQuery);
+  printResult("Vector search rejects empty query", !vectorEmpty.success);
+
+  const hybridEmpty = await hybridSearchDocuments(emptyQuery);
+  printResult("Hybrid search rejects empty query", !hybridEmpty.success);
+
+  const hybridBadWeights = await hybridSearchDocuments("invoice", {
+    vectorWeight: -0.1,
+    keywordWeight: 1.1,
+  });
+  printResult("Hybrid search rejects invalid weights", !hybridBadWeights.success);
+
+  return !vectorEmpty.success && !hybridEmpty.success && !hybridBadWeights.success;
+}
+
 async function main() {
   console.log("=".repeat(60));
   console.log("Semantic & Hybrid Search Test Suite");
@@ -478,6 +747,30 @@ async function main() {
     // Test 8: Hybrid vs vector comparison
     const test8 = await testHybridVsVectorComparison();
     results.push({ test: "Hybrid vs Vector Comparison", passed: test8 });
+
+    // Test 9: Result invariants
+    const test9 = await testResultInvariants();
+    results.push({ test: "Result Invariants", passed: test9 });
+
+    // Test 10: Hybrid score bounds
+    const test10 = await testHybridScoreBounds();
+    results.push({ test: "Hybrid Score Bounds", passed: test10 });
+
+    // Test 11: Hybrid ordering
+    const test11 = await testHybridOrdering();
+    results.push({ test: "Hybrid Ordering", passed: test11 });
+
+    // Test 12: Hybrid score formula
+    const test12 = await testHybridScoreFormula();
+    results.push({ test: "Hybrid Score Formula", passed: test12 });
+
+    // Test 13: Hybrid keyword boost
+    const test13 = await testHybridKeywordBoostFromResult();
+    results.push({ test: "Hybrid Keyword Boost", passed: test13 });
+
+    // Test 14: Error handling
+    const test14 = await testErrorHandling();
+    results.push({ test: "Error Handling", passed: test14 });
   } catch (error) {
     console.error();
     console.error("Fatal error during tests:", error);

@@ -1,7 +1,7 @@
 /**
  * Gemini Embeddings Client
  *
- * Uses Gemini's text-embedding-004 model for generating embeddings.
+ * Uses Gemini's gemini-embedding-001 model for generating embeddings.
  * Output dimension: 768
  */
 
@@ -11,8 +11,7 @@ export const EMBEDDING_MODEL = "gemini-embedding-001";
 const EMBEDDING_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:embedContent`;
 const OUTPUT_DIMENSIONALITY = 768;
 
-// Max input tokens for text-embedding-004 is 2048
-// Truncate to ~8000 chars to be safe (rough estimate: 4 chars per token)
+// Truncate long text before embedding to keep latency and token usage stable.
 const MAX_TEXT_LENGTH = 8000;
 
 export interface EmbeddingResult {
@@ -47,7 +46,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Generate embedding for text using Gemini text-embedding-004
+ * Generate embedding for text using Gemini gemini-embedding-001
  *
  * @param text - Text to generate embedding for
  * @param retries - Number of retries for rate limiting (default: 3)

@@ -226,7 +226,9 @@ async function synthesizeAnswer(
 
   try {
     const result = await generateContentWithTimeout(model, prompt);
-    return result.response.text();
+    return typeof result.response.text === "function"
+      ? result.response.text()
+      : (result.response.text ?? "");
   } catch (error) {
     console.error("[RAG] Gemini error:", error);
     throw error;

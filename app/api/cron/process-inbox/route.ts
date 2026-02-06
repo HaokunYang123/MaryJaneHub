@@ -1,6 +1,19 @@
 import { NextResponse } from "next/server";
 import { queueAndProcessInbox } from "@/lib/queue";
 
+function parseEnvInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseEnvBool(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  return raw.toLowerCase() === "true";
+}
+
 /**
  * Vercel Cron endpoint for processing inbox files
  * Called automatically by Vercel Cron based on vercel.json schedule
@@ -25,10 +38,22 @@ export async function GET(request: Request): Promise<NextResponse> {
   console.log(`[${new Date().toISOString()}] Cron job triggered: process-inbox (parallel)`);
 
   try {
+    const concurrency = parseEnvInt("WORKER_CONCURRENCY", 6);
+    const batchSize = parseEnvInt("WORKER_BATCH_SIZE", 10);
+    const maxRunTime = parseEnvInt("WORKER_MAX_RUNTIME_MS", 55000);
+    const minConcurrency = parseEnvInt("WORKER_MIN_CONCURRENCY", 2);
+    const maxConcurrency = parseEnvInt("WORKER_MAX_CONCURRENCY", 12);
+    const scaleUpAfter = parseEnvInt("WORKER_SCALE_UP_AFTER", 2);
+    const adaptiveConcurrency = parseEnvBool("WORKER_ADAPTIVE_CONCURRENCY", true);
+
     const stats = await queueAndProcessInbox({
-      concurrency: 12, // Process 12 files in parallel
-      batchSize: 15, // Claim 15 jobs per cycle
-      maxRunTime: 55000, // 55 seconds (safe for Vercel 60s timeout)
+      concurrency,
+      batchSize,
+      maxRunTime,
+      adaptiveConcurrency,
+      minConcurrency,
+      maxConcurrency,
+      scaleUpAfter,
     });
 
     console.log(

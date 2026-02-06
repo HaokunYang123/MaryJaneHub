@@ -9,7 +9,7 @@
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 import { getSupabase } from "@/lib/supabase/client";
-import { generateCleanFilename } from "@/lib/utils/filename";
+import { appendNeedsReviewSuffix, generateCleanFilename } from "@/lib/utils/filename";
 import { getDriveClient } from "@/lib/google-drive/client";
 import type { DocumentExtraction } from "@/lib/gemini/extract-document";
 
@@ -28,7 +28,7 @@ async function renameProcessedFiles(dryRun: boolean = true): Promise<RenameResul
   // Get all documents with drive_file_id
   const { data: documents, error } = await supabase
     .from("documents")
-    .select("id, file_name, drive_file_id, document_type, extraction")
+    .select("id, file_name, drive_file_id, document_type, extraction, sync_status")
     .not("drive_file_id", "is", null)
     .order("created_at", { ascending: false });
 
@@ -58,11 +58,16 @@ async function renameProcessedFiles(dryRun: boolean = true): Promise<RenameResul
 
       // Generate new filename using updated function
       // Pass document_type from database as override (canonical source of truth)
-      const newName = generateCleanFilename(
+      const baseName = generateCleanFilename(
         extraction,
         doc.file_name,
         doc.document_type as any
       );
+      const needsReview = doc.sync_status === "needs_attention" ||
+        doc.sync_status === "pending_review" ||
+        doc.sync_status === "ocr_failed" ||
+        doc.sync_status === "extraction_failed";
+      const newName = needsReview ? appendNeedsReviewSuffix(baseName) : baseName;
 
       // Check if rename needed
       if (doc.file_name === newName) {

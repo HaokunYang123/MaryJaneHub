@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { FieldEvidenceMap } from "./field-evidence";
-import { getGeminiModel, cleanJsonResponse } from "./client";
-import { buildJsonRequest, generateContentWithTimeout } from "./call";
+import { getGeminiModel, parseJsonResponse } from "./client";
+import { generateStructuredJson, StructuredJsonError } from "./structured-json";
 import { contractResponseSchema } from "./response-schemas";
 
 // Zod schemas
@@ -95,48 +95,57 @@ function calculateConfidence(data: z.infer<typeof ContractResponseSchema>): numb
 }
 
 function parseResponse(rawResponse: string): z.infer<typeof ContractResponseSchema> {
-  const cleaned = cleanJsonResponse(rawResponse);
-  const parsed = JSON.parse(cleaned);
+  const parsed = parseJsonResponse<Record<string, unknown>>(rawResponse);
   return ContractResponseSchema.parse(parsed);
 }
 
 export async function extractContract(rawText: string): Promise<ContractExtraction> {
   const model = getGeminiModel();
-  const prompt = EXTRACTION_PROMPT + rawText;
+  const prompt = EXTRACTION_PROMPT + rawText.slice(0, 12000);
   let rawResponse = "";
 
   try {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const temperature = attempt === 0 ? 0.2 : 0;
-      const request = buildJsonRequest(prompt, contractResponseSchema, {
-        temperature,
-        maxOutputTokens: 1400,
-      });
-      const result = await generateContentWithTimeout(model, request);
-      const response = result.response;
-      rawResponse = response.text();
-      try {
-        const parsed = parseResponse(rawResponse);
+    const { parsed, rawResponse: modelRaw } = await generateStructuredJson({
+      model,
+      prompt,
+      schema: contractResponseSchema,
+      label: "contract extraction",
+      attempts: [
+        { temperature: 0.1, maxOutputTokens: 1400 },
+        {
+          temperature: 0,
+          maxOutputTokens: 2000,
+          promptSuffix:
+            "Return one JSON object only. No preface, no explanation, no markdown.",
+        },
+      ],
+      parser: parseResponse,
+    });
+    rawResponse = modelRaw;
 
-        return {
-          contract_type: parsed.contract_type ?? null,
-          parties: parsed.parties || [],
-          effective_date: parsed.effective_date ?? null,
-          expiration_date: parsed.expiration_date ?? null,
-          value: parsed.value ?? null,
-          key_terms: parsed.key_terms || [],
-          governing_law: parsed.governing_law ?? null,
-          termination_clause: parsed.termination_clause ?? null,
-          confidence: calculateConfidence(parsed),
-          raw_response: rawResponse,
-        };
-      } catch (parseError) {
-        if (attempt === 1) {
-          throw parseError;
-        }
-      }
+    return {
+      contract_type: parsed.contract_type ?? null,
+      parties: parsed.parties || [],
+      effective_date: parsed.effective_date ?? null,
+      expiration_date: parsed.expiration_date ?? null,
+      value: parsed.value ?? null,
+      key_terms: parsed.key_terms || [],
+      governing_law: parsed.governing_law ?? null,
+      termination_clause: parsed.termination_clause ?? null,
+      confidence: calculateConfidence(parsed),
+      raw_response: rawResponse,
+    };
+  } catch (error) {
+    if (error instanceof StructuredJsonError && error.diagnostics?.rawResponse) {
+      rawResponse = error.diagnostics.rawResponse;
     }
-  } catch {
+    if (error instanceof StructuredJsonError && error.diagnostics?.finishReason) {
+      console.warn(
+        `  Contract extraction finish reason: ${error.diagnostics.finishReason}` +
+          (error.diagnostics.finishMessage ? ` (${error.diagnostics.finishMessage})` : "")
+      );
+    }
+
     return {
       contract_type: null,
       parties: [],
