@@ -272,7 +272,9 @@ export default function AssistantAuditViewer() {
         </label>
         <button
           type="button"
-          onClick={fetchAudit}
+          onClick={() => {
+            void fetchAudit();
+          }}
           className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
           disabled={state.loading}
         >

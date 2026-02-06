@@ -22,12 +22,16 @@ type IDimension = google.cloud.documentai.v1.Document.Page.IDimension;
 type IBoundingPoly = google.cloud.documentai.v1.IBoundingPoly;
 type IVertex = google.cloud.documentai.v1.IVertex;
 type INormalizedVertex = google.cloud.documentai.v1.INormalizedVertex;
+type IProcessResponse = google.cloud.documentai.v1.IProcessResponse;
+type ProcessDocumentTuple =
+  | [IProcessResponse]
+  | [IProcessResponse, unknown, unknown];
 
 type DocumentAIClient = {
   processDocument: (request: {
     name: string;
     rawDocument: { content: string; mimeType: string };
-  }) => Promise<[google.cloud.documentai.v1.IProcessResponse]>;
+  }) => Promise<ProcessDocumentTuple>;
 };
 
 let clientOverride: DocumentAIClient | null = null;

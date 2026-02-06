@@ -53,6 +53,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       { status: 400 }
     );
   }
+  const searchQuery = query;
 
   // Parse mode (default: hybrid)
   const mode = searchParams.get("mode") || "hybrid";
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             layout = undefined;
           }
         }
-        const highlight = buildSearchHighlight(query, result.rawText, layout);
+        const highlight = buildSearchHighlight(searchQuery, result.rawText, layout);
         return { ...result, highlight };
       })
     );
@@ -155,7 +156,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         minScore = parsed;
       }
 
-      const result = await hybridSearchDocuments(query, {
+      const result = await hybridSearchDocuments(searchQuery, {
         limit,
         vectorWeight,
         keywordWeight,
@@ -197,7 +198,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         threshold = parsed;
       }
 
-      const result = await searchDocuments(query, {
+      const result = await searchDocuments(searchQuery, {
         limit,
         threshold,
         documentType: typeParam || undefined,

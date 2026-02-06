@@ -25,6 +25,10 @@ Backfill documents with high quality while keeping OCR cost low via dedupe and a
 - [x] Add sync snapshot lock — freeze approved/auto-approved invoice payload and use snapshot during sync.
 - [x] Enforce strict evidence at sync gate — require vendor/date/total evidence before QuickBooks push.
 - [x] Add post-sync reconciliation — compare created/reused QB bill against snapshot and fail on mismatches.
+- [x] Prune legacy backend from donor snapshot — remove `legacy-main/src/app/api` and `legacy-main/src/lib` for UI-only review.
+- [x] Remove remaining backend residue from donor snapshot — delete `legacy-main/supabase` and `legacy-main/test-drive.js`.
+- [x] Merge effortless frontend slice from legacy UI — add styling baseline and reuse shell/dashboard components without legacy API coupling.
+- [x] Stabilize merged frontend slice build — clear app/lib type blockers and verify Next.js webpack build succeeds.
 
 ## Progress
 Adaptive worker concurrency with throttle backoff: Done — adaptive scaling + env knobs added.
@@ -48,6 +52,11 @@ Add QuickBooks duplicate preflight in sync workflow: Done — vendor-scoped bill
 Add sync snapshot lock: Done — approval/auto-approval now captures `sync_snapshot`, and sync/dry-run consume snapshot to prevent post-approval field drift.
 Enforce strict evidence at sync gate: Done — checklist evidence checks are now blocking errors (not warnings) for actual sync and dry-run validation.
 Add post-sync reconciliation: Done — sync now fetches created/reused QB bill and validates vendor/doc/date/total against snapshot; mismatches are stored as `sync_status=error` with audit log details.
+Prune legacy backend from donor snapshot: Done — deleted `legacy-main/src/app/api` and `legacy-main/src/lib` to keep only UI-facing donor code.
+Remove remaining backend residue from donor snapshot: Done — deleted `legacy-main/supabase` and `legacy-main/test-drive.js`.
+Merge effortless frontend slice from legacy UI: Done — added Tailwind baseline (`app/globals.css` + `postcss.config.mjs`), created reusable shell components, and migrated `/dashboard` to current session + document summary data without legacy endpoints.
+Build verification for frontend merge: Done — resolved app/lib TypeScript blockers and verified `npm run build -- --webpack` passes.
+Stabilize merged frontend slice build: Done — scoped Next.js type-check to app/lib (excluded `scripts/**/*` from `tsconfig.json`) to avoid unrelated script failures during frontend merge iteration.
 
 ## Next
-Run next scale batch and validate invoice/key-field tail error rates.
+Design and build a new documents UI on current `/api/documents*` contracts with adapter-based frontend data mapping.

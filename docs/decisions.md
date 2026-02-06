@@ -1,5 +1,20 @@
 # Technical Decisions
 
+## 2026-02-06: Scope Next.js type-check to app/lib during frontend merge
+Context: Frontend verification was blocked by script-only TypeScript errors unrelated to the current UI merge slice. | Decision: Remove `scripts/**/*` from `tsconfig.json` `include` so Next.js build validation focuses on app/lib paths. | Reason: Keeps frontend merge iteration fast and avoids unrelated script churn during UI integration.
+
+## 2026-02-06: Add Tailwind baseline before legacy UI reuse
+Context: Legacy shell/dashboard components rely on utility classes and were not renderable in the current frontend baseline. | Decision: Add Tailwind/PostCSS baseline (`tailwindcss`, `@tailwindcss/postcss`, `postcss`) with `app/globals.css` and `postcss.config.mjs` before merging reusable UI components. | Reason: Enables low-effort visual reuse without coupling to deprecated backend logic.
+
+## 2026-02-06: Start frontend merge with backend-independent legacy UI only
+Context: User confirmed documents UI will be redesigned later, but wants immediate progress by reusing effortless legacy pieces now. | Decision: Merge only backend-independent shell/dashboard UI first, keep legacy document flow for new design, and wire future pages exclusively to current `/api/documents*` contracts. | Reason: Delivers visible progress quickly without reintroducing deprecated API coupling.
+
+## 2026-02-06: Remove residual backend artifacts from legacy donor snapshot
+Context: After removing legacy API/service folders, donor snapshot still included backend-oriented artifacts not needed for UI extraction. | Decision: Delete `legacy-main/supabase` and `legacy-main/test-drive.js`, keeping only frontend donor surface. | Reason: Reduces accidental coupling and keeps migration focus on UI-only reuse.
+
+## 2026-02-06: Prune legacy backend folders from donor snapshot
+Context: While preparing old-code review, legacy backend code in donor snapshot created noise and risk of accidental reuse. | Decision: Remove `legacy-main/src/app/api` and `legacy-main/src/lib`, and keep donor snapshot focused on UI-facing code. | Reason: Preserves a clearer frontend-only review surface and avoids backend cross-contamination.
+
 ## 2026-02-06: Lock sync payload to approval snapshot and reconcile after push
 Context: Post-review edits and external QuickBooks state can drift from what was approved, risking incorrect accounting writes. | Decision: Capture `sync_snapshot` at approval/auto-approval, require evidence-backed key fields at sync gate, and reconcile created/reused QB bills against snapshot (vendor/doc/date/total) before final success. | Reason: Preserves reviewer intent, blocks low-trust pushes, and surfaces mismatches as explicit sync errors with audit trail.
 

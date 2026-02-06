@@ -190,8 +190,8 @@ export function sanitizeAuditPayloadForTest(payload: AuditPayload): AuditPayload
       result.citations = sanitizeCitations(payload.citations);
       continue;
     }
-    const value = (payload as Record<string, unknown>)[key];
-    (result as Record<string, unknown>)[key] = sanitizeValue(key, value);
+    const value = (payload as unknown as Record<string, unknown>)[key];
+    (result as unknown as Record<string, unknown>)[key] = sanitizeValue(key, value);
   }
 
   return result;

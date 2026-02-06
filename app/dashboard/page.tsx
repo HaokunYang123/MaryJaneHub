@@ -1,89 +1,120 @@
 import { getSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { getSyncStatusSummary } from "@/lib/supabase/documents";
+import AppShell from "@/components/layout/AppShell";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const { user, error } = await getSession();
+  const { user } = await getSession();
 
   if (!user) {
     redirect("/login");
   }
 
+  let summary = {
+    pending_review: 0,
+    needs_attention: 0,
+    approved: 0,
+    auto_approved: 0,
+    synced: 0,
+    error: 0,
+    rejected: 0,
+    not_applicable: 0,
+  };
+
+  try {
+    const data = await getSyncStatusSummary();
+    summary = { ...summary, ...data };
+  } catch (error) {
+    console.warn("Failed to load dashboard summary", error);
+  }
+
+  const reviewCount = summary.pending_review + summary.needs_attention;
+  const readyToSync = summary.approved + summary.auto_approved;
+  const syncedCount = summary.synced;
+  const errorCount = summary.error;
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">MaryJane Hub</h1>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                {user.avatarUrl && (
-                  <img
-                    src={user.avatarUrl}
-                    alt={user.name || user.email}
-                    className="w-8 h-8 rounded-full"
-                  />
-                )}
-                <div className="text-sm">
-                  <p className="font-medium text-gray-900">{user.name || user.email}</p>
-                  <p className="text-gray-500 text-xs">{user.role}</p>
-                </div>
-              </div>
-              <form action="/api/auth/signout" method="POST">
-                <button
-                  type="submit"
-                  className="text-sm text-gray-600 hover:text-gray-900"
-                >
-                  Sign out
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      </nav>
+    <AppShell user={user}>
+      <section className="mb-6 flex flex-col gap-2">
+        <h1 className="text-3xl font-black tracking-tight text-slate-900">Financial Command Center</h1>
+        <p className="text-sm text-slate-600">
+          Reused shell/dashboard UI merged from legacy design, wired to current backend status.
+        </p>
+      </section>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
-          <p className="mt-1 text-gray-600">Welcome back, {user.name || user.email}</p>
-        </div>
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Needs Review</p>
+          <p className="mt-2 text-3xl font-black text-slate-900">{reviewCount}</p>
+          <p className="mt-1 text-xs text-slate-500">pending_review + needs_attention</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ready To Sync</p>
+          <p className="mt-2 text-3xl font-black text-[var(--brand-green)]">{readyToSync}</p>
+          <p className="mt-1 text-xs text-slate-500">approved + auto_approved</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Synced</p>
+          <p className="mt-2 text-3xl font-black text-slate-900">{syncedCount}</p>
+          <p className="mt-1 text-xs text-slate-500">successfully pushed to QuickBooks</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Errors</p>
+          <p className="mt-2 text-3xl font-black text-red-700">{errorCount}</p>
+          <p className="mt-1 text-xs text-slate-500">documents with sync errors</p>
+        </article>
+      </section>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Link href="/documents" className="block">
-            <div className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow">
-              <h3 className="text-lg font-semibold text-gray-900">Documents</h3>
-              <p className="mt-2 text-gray-600">View and manage processed documents</p>
-            </div>
-          </Link>
-
-          <Link href="/api/documents/sync" className="block">
-            <div className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow">
-              <h3 className="text-lg font-semibold text-gray-900">Sync Inbox</h3>
-              <p className="mt-2 text-gray-600">Process new documents from Drive inbox</p>
-            </div>
-          </Link>
-
-          <Link href="/api/documents/search" className="block">
-            <div className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow">
-              <h3 className="text-lg font-semibold text-gray-900">Search</h3>
-              <p className="mt-2 text-gray-600">Search documents using AI-powered semantic search</p>
-            </div>
-          </Link>
-
-          {user.role === "admin" && (
-            <Link href="/admin/whitelist" className="block">
-              <div className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow border-2 border-blue-100">
-                <h3 className="text-lg font-semibold text-gray-900">User Management</h3>
-                <p className="mt-2 text-gray-600">Manage authorized users (Admin only)</p>
-              </div>
+      <section className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-900">Quick Actions</h2>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link
+              href="/documents"
+              className="rounded-lg bg-[var(--brand-green)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:opacity-90"
+            >
+              Open Documents
             </Link>
+            <Link
+              href="/api/quickbooks/connect"
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              Connect QuickBooks
+            </Link>
+            <Link
+              href="/api/documents/summary"
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              View Summary API
+            </Link>
+          </div>
+        </article>
+
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-900">Admin</h2>
+          {user.role === "admin" ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link
+                href="/admin/audit/assistant"
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                Assistant Audit
+              </Link>
+              <Link
+                href="/admin/whitelist"
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                Whitelist
+              </Link>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-slate-600">Admin links are available to admin users only.</p>
           )}
-        </div>
-      </main>
-    </div>
+        </article>
+      </section>
+    </AppShell>
   );
 }

@@ -36,11 +36,7 @@ export function buildQbIdempotencyKey(input: IdempotencyKeyInput): string {
 
 export async function getQbIdempotencyRecord(
   supabase: {
-    from: (table: string) => {
-      select: (fields: string) => unknown;
-      eq: (column: string, value: string) => unknown;
-      maybeSingle: () => Promise<{ data: QbIdempotencyRecord | null; error: { message: string } | null }>;
-    };
+    from: (table: string) => any;
   },
   idempotencyKey: string
 ): Promise<QbIdempotencyRecord | null> {
@@ -59,9 +55,7 @@ export async function getQbIdempotencyRecord(
 
 export async function insertQbIdempotencyRecord(
   supabase: {
-    from: (table: string) => {
-      insert: (record: QbIdempotencyRecord) => Promise<{ error: { code?: string; message: string } | null }>;
-    };
+    from: (table: string) => any;
   },
   record: QbIdempotencyRecord
 ): Promise<{ record: QbIdempotencyRecord; deduped: boolean }> {

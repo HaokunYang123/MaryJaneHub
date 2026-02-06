@@ -27,13 +27,13 @@ function mergeFallbackData<T extends Record<string, unknown>>(
   base: T,
   fallback: Record<string, unknown>
 ): T {
-  const merged = { ...base };
+  const merged: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(fallback)) {
     if (isEmptyValue(merged[key]) && !isEmptyValue(value)) {
-      merged[key] = value as T[keyof T];
+      merged[key] = value;
     }
   }
-  return merged;
+  return merged as T;
 }
 
 function shouldFallback(documentType: DocumentType, extraction: DocumentExtraction): boolean {
@@ -59,6 +59,18 @@ function shouldFallback(documentType: DocumentType, extraction: DocumentExtracti
     default:
       return confidence < 0.6;
   }
+}
+
+function normalizeGcsHashType(value: string | null | undefined): "md5" | "crc32c" | undefined {
+  if (value === "md5" || value === "crc32c") return value;
+  return undefined;
+}
+
+function normalizeGcsRetentionStatus(
+  value: string | null | undefined
+): "confirmed" | "unconfirmed" | undefined {
+  if (value === "confirmed" || value === "unconfirmed") return value;
+  return undefined;
 }
 
 /**
@@ -247,9 +259,9 @@ export async function processDocument(
           gcsBucket: existingDoc.gcs_bucket || undefined,
           gcsObject: existingDoc.gcs_object || undefined,
           gcsGeneration: existingDoc.gcs_generation || undefined,
-          gcsHashType: existingDoc.gcs_hash_type || undefined,
+          gcsHashType: normalizeGcsHashType(existingDoc.gcs_hash_type),
           gcsHashValue: existingDoc.gcs_hash_value || undefined,
-          gcsRetentionStatus: existingDoc.gcs_retention_status || undefined,
+          gcsRetentionStatus: normalizeGcsRetentionStatus(existingDoc.gcs_retention_status),
           status: "duplicate",
           timings: {
             ...timings,

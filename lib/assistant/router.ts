@@ -179,7 +179,7 @@ Extracted info:
 - Date/Year: ${slots.year || slots.date || "not specified"}
 - Amount: ${slots.amount || "not specified"}
 
-Respond with JSON only:
+  Respond with JSON only:
 {
   "intent": "search" | "single_qa" | "sum" | "rag",
   "confidence": 0.0-1.0,
@@ -187,7 +187,9 @@ Respond with JSON only:
 }`;
 
   try {
-    const result = await generateContentWithTimeout(model, prompt);
+    const result = (await generateContentWithTimeout(model, prompt)) as {
+      response: { text?: string | (() => string) };
+    };
     const responseText =
       typeof result.response.text === "function"
         ? result.response.text()

@@ -242,7 +242,9 @@ RESPONSE FORMAT:
 Provide your answer with quoted evidence from the document.`;
 
   try {
-    const result = await generateContentWithTimeout(model, prompt);
+    const result = (await generateContentWithTimeout(model, prompt)) as {
+      response: { text?: string | (() => string) };
+    };
     const responseText =
       typeof result.response.text === "function"
         ? result.response.text()

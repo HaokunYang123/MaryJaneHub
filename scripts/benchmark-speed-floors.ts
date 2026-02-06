@@ -10,7 +10,7 @@
  */
 
 import { searchDocuments, smartSearch } from "@/lib/search";
-import { handleAssistantQuery } from "@/lib/assistant";
+import { createConversationContext, handleAssistantQuery } from "@/lib/assistant";
 
 interface BenchmarkResult {
   operation: string;
@@ -148,11 +148,8 @@ async function benchmarkAssistant(iterations: number, mode: "owner" | "lawyer"):
     const start = performance.now();
 
     try {
-      const context = {
-        sessionId: `benchmark-${Date.now()}-${i}`,
-        conversationHistory: [],
-      };
-      await handleAssistantQuery(query, context, mode);
+      const context = createConversationContext();
+      await handleAssistantQuery(query, context, undefined, { mode });
       const elapsed = performance.now() - start;
       timings.push(elapsed);
       process.stdout.write(".");

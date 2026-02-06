@@ -17,6 +17,7 @@ import type {
   CandidateDocument,
   AssistantResponse,
   QAResult,
+  RAGResult,
   Citation,
   AssistantMode,
 } from "./types";
@@ -24,6 +25,7 @@ import { answerSingleDocumentQuestion } from "./single-qa";
 import { executeSearch } from "./search-handler";
 import { executeSum, formatSumResult } from "./sum-handler";
 import { executeRAG, formatRAGResult } from "./rag-handler";
+import type { AuditCitation } from "../audit/logger";
 import { appendAudit, finalizeAudit, startAudit } from "../audit/logger";
 import { INSUFFICIENT_INFO_MESSAGE } from "./messages";
 
@@ -51,7 +53,7 @@ function sanitizeSlots(slots: Slots): Record<string, unknown> {
   };
 }
 
-function buildCitationMetadata(citations: Citation[]): Array<Record<string, unknown>> {
+function buildCitationMetadata(citations: Citation[]): AuditCitation[] {
   return citations.map((c) => ({
     document_id: c.docId,
     start_offset: c.span?.[0],
@@ -353,7 +355,8 @@ export async function handleAssistantQuery(
   const handlers = resolveAssistantHandlers(handlerOverrides);
   const ctx = context || createConversationContext();
   const mode: AssistantMode = options?.mode ?? "owner";
-  const auditRequestId = await startAudit({ actor: "system", inputText: query });
+  const startedAuditRequestId = await startAudit({ actor: "system", inputText: query });
+  const auditRequestId = startedAuditRequestId ?? undefined;
 
   // Add user message to history
   ctx.history.push({
@@ -797,7 +800,7 @@ export async function handleAssistantQuery(
 async function handleQAResult(
   qaResult: QAResult,
   ctx: ConversationContext,
-  auditRequestId?: string | null
+  auditRequestId?: string
 ): Promise<AssistantResponse> {
   // Handle multiple matches - need clarification
   if (qaResult.error === "multiple_matches") {

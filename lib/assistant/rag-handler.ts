@@ -89,11 +89,11 @@ async function retrieveRelevantDocuments(
     return [];
   }
 
-  let documents = searchResult.results.map((r, index) => ({
+  let documents: DocumentRecord[] = searchResult.results.map((r, index) => ({
     id: r.id,
     file_name: r.fileName,
-    document_type: r.documentType,
-    raw_text: r.rawText || "",
+    document_type: r.documentType || "other",
+    raw_text: "",
     extraction: r.extraction as Record<string, unknown>,
     relevanceScore: 1 - index * 0.05, // Approximate relevance from ranking
   }));
@@ -225,7 +225,9 @@ async function synthesizeAnswer(
   const prompt = buildRAGPrompt(query, documents, mode);
 
   try {
-    const result = await generateContentWithTimeout(model, prompt);
+    const result = (await generateContentWithTimeout(model, prompt)) as {
+      response: { text?: string | (() => string) };
+    };
     return typeof result.response.text === "function"
       ? result.response.text()
       : (result.response.text ?? "");
