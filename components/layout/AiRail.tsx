@@ -116,11 +116,22 @@ export default function AiRail() {
   });
   const messagesRef = useRef<HTMLDivElement | null>(null);
 
+  const userNearBottom = useRef(true);
+
   useEffect(() => {
     const node = messagesRef.current;
     if (!node) return;
-    node.scrollTop = node.scrollHeight;
+    if (userNearBottom.current) {
+      node.scrollTop = node.scrollHeight;
+    }
   }, [messages, railOpen]);
+
+  function handleMessagesScroll(): void {
+    const node = messagesRef.current;
+    if (!node) return;
+    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+    userNearBottom.current = distanceFromBottom < 80;
+  }
 
   async function runSearch(input: string): Promise<void> {
     const trimmed = input.trim();
@@ -162,6 +173,7 @@ export default function AiRail() {
       ]);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Assistant request failed.";
+      setConversationContext({ history: [] });
       setMessages((prev) => [
         ...prev,
         { id: `assistant-error-${Date.now()}`, role: "assistant", text: `Error: ${message}` },
@@ -215,7 +227,7 @@ export default function AiRail() {
             </div>
           </div>
 
-          <div ref={messagesRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+          <div ref={messagesRef} onScroll={handleMessagesScroll} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
             {messages.map((message) => (
               <div key={message.id} className="space-y-2">
                 <div

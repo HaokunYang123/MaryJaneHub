@@ -328,7 +328,7 @@ export default function DocumentsWorkspace() {
       return;
     }
 
-    let active = true;
+    const controller = new AbortController();
     setDetailLoading(true);
     setPreviewLoading(true);
     setDetailError(null);
@@ -338,9 +338,11 @@ export default function DocumentsWorkspace() {
       try {
         const detailPromise = fetch(`/api/documents/${selectedDocumentId}`, {
           cache: "no-store",
+          signal: controller.signal,
         });
         const previewPromise = fetch(`/api/documents/${selectedDocumentId}/preview`, {
           cache: "no-store",
+          signal: controller.signal,
         });
 
         const [detailResponse, previewResponse] = await Promise.all([detailPromise, previewPromise]);
@@ -355,19 +357,19 @@ export default function DocumentsWorkspace() {
           throw new Error(previewPayload.error || "Failed to load file preview.");
         }
 
-        if (!active) return;
+        if (controller.signal.aborted) return;
         setSelectedDocument(detailPayload.data);
         setPreviewAsset(previewPayload.data);
       } catch (error) {
+        if (controller.signal.aborted) return;
         const message =
           error instanceof Error ? error.message : "Failed to load document preview.";
-        if (!active) return;
         setSelectedDocument(null);
         setPreviewAsset(null);
         setDetailError(message);
         setPreviewError(message);
       } finally {
-        if (active) {
+        if (!controller.signal.aborted) {
           setDetailLoading(false);
           setPreviewLoading(false);
         }
@@ -377,7 +379,7 @@ export default function DocumentsWorkspace() {
     void load();
 
     return () => {
-      active = false;
+      controller.abort();
     };
   }, [selectedDocumentId]);
 
