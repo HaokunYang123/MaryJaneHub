@@ -9,6 +9,7 @@ Track the product-owner actions needed to launch secure, professional AI file ma
 
 ## Immediate (This Week)
 - [x] Share Mary test parent folder access for integration validation (includes Inbox + Processed).
+- [ ] Share `/docs/ops/collaboration-boundary.md` with banking coworker and require Codex/Claude sessions to follow it until integration phase.
 - [ ] Confirm AI-managed root folders for each business entity (final names + Drive IDs).
 - [x] Confirm policy: outside AI-managed roots = read + private metadata only (no auto-move/rename).
 - [ ] Confirm duplicate canonical rule for search: highest confidence, then newest, then AI-root priority.

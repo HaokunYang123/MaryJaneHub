@@ -4,6 +4,8 @@ import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAiRail } from "@/components/layout/AiRailProvider";
 import type { FactPair, SourceContext } from "@/components/layout/ai-rail-types";
+import PdfHighlightViewer from "./PdfHighlightViewer";
+import { extractHighlights } from "./pdf-highlights";
 
 type SyncStatus =
   | "pending_review"
@@ -199,6 +201,69 @@ function parsePage(pageParam: string | null): number | null {
   return Math.trunc(parsed);
 }
 
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if (value < 0) return 0;
+  if (value > 100) return 100;
+  return Math.round(value);
+}
+
+function getEvidenceCoverage(extraction: Record<string, unknown> | null | undefined): number {
+  if (!extraction) return 0;
+  const data = getExtractionData(extraction);
+  const evidence = data.field_evidence;
+  if (!evidence || typeof evidence !== "object") return 0;
+
+  const keyFields = ["vendor", "merchant_name", "invoice_date", "date", "total", "amount", "invoice_number"];
+  let found = 0;
+  let covered = 0;
+
+  for (const field of keyFields) {
+    const value = toDisplay(data[field]);
+    if (!value) continue;
+    found += 1;
+    const fieldEntry = (evidence as Record<string, unknown>)[field];
+    const coords = (fieldEntry as { evidence?: { coords?: unknown } } | undefined)?.evidence?.coords;
+    if (coords) covered += 1;
+  }
+
+  if (found === 0) return 0;
+  return clampPercent((covered / found) * 100);
+}
+
+function getStatusRiskPenalty(status: SyncStatus): number {
+  if (status === "needs_attention" || status === "error" || status === "rejected") return 28;
+  if (status === "pending_review") return 18;
+  if (status === "not_applicable") return 12;
+  return 0;
+}
+
+function getTrustTone(score: number): {
+  label: "High" | "Medium" | "Low";
+  chipClass: string;
+  barClass: string;
+} {
+  if (score >= 80) {
+    return {
+      label: "High",
+      chipClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      barClass: "bg-emerald-500",
+    };
+  }
+  if (score >= 60) {
+    return {
+      label: "Medium",
+      chipClass: "border-amber-200 bg-amber-50 text-amber-700",
+      barClass: "bg-amber-500",
+    };
+  }
+  return {
+    label: "Low",
+    chipClass: "border-red-200 bg-red-50 text-red-700",
+    barClass: "bg-red-500",
+  };
+}
+
 export default function DocumentsWorkspace() {
   const searchParams = useSearchParams();
   const { registerPreviewHandler } = useAiRail();
@@ -223,6 +288,12 @@ export default function DocumentsWorkspace() {
 
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const [dragActive, setDragActive] = useState(false);
+  const [pdfFallback, setPdfFallback] = useState(false);
+
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [rejectReasonInput, setRejectReasonInput] = useState("");
+  const [showRejectForm, setShowRejectForm] = useState(false);
 
   const documentFacts = useMemo(
     () => getResultFacts(selectedDocument?.extraction || null),
@@ -237,6 +308,34 @@ export default function DocumentsWorkspace() {
     if (!isPdfMime(previewAsset.mimeType)) return previewAsset.url;
     return buildPdfPreviewUrl(previewAsset.url, previewPage, highlightToken);
   }, [previewAsset, previewPage, highlightToken]);
+
+  const pdfHighlights = useMemo(
+    () => extractHighlights(selectedDocument?.extraction || null, activeContext),
+    [selectedDocument, activeContext]
+  );
+
+  const reviewable =
+    selectedDocument?.sync_status === "pending_review" ||
+    selectedDocument?.sync_status === "needs_attention";
+
+  const confidenceProfile = useMemo(() => {
+    if (!selectedDocument) return null;
+    const extraction = clampPercent(
+      (selectedDocument.confidence_score ?? selectedDocument.extraction_confidence ?? 0) * 100
+    );
+    const evidence = getEvidenceCoverage(selectedDocument.extraction);
+    const contextSignal = activeContext ? 100 : 55;
+    const penalty = getStatusRiskPenalty(selectedDocument.sync_status);
+    const trustScore = clampPercent(extraction * 0.55 + evidence * 0.3 + contextSignal * 0.15 - penalty);
+    const tone = getTrustTone(trustScore);
+    return {
+      extraction,
+      evidence,
+      contextSignal,
+      trustScore,
+      tone,
+    };
+  }, [activeContext, selectedDocument]);
 
   const stats = useMemo(() => {
     const pending = documents.filter(
@@ -320,6 +419,11 @@ export default function DocumentsWorkspace() {
   }, [docParam, openPreview, pageParam, queryParam, tokenParam]);
 
   useEffect(() => {
+    setPdfFallback(false);
+    setReviewLoading(false);
+    setReviewError(null);
+    setRejectReasonInput("");
+    setShowRejectForm(false);
     if (!selectedDocumentId) {
       setSelectedDocument(null);
       setPreviewAsset(null);
@@ -387,6 +491,63 @@ export default function DocumentsWorkspace() {
     if (!fileList || fileList.length === 0) return;
     const incoming = Array.from(fileList);
     setStagedFiles((prev) => [...incoming, ...prev].slice(0, 8));
+  }
+
+  async function approveDocument(): Promise<void> {
+    if (!selectedDocumentId) return;
+    setReviewLoading(true);
+    setReviewError(null);
+    try {
+      const res = await fetch(`/api/documents/${selectedDocumentId}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewedBy: "ui" }),
+      });
+      const payload = await res.json();
+      if (!res.ok || !payload.success) {
+        throw new Error(payload.error || "Failed to approve document.");
+      }
+      setSelectedDocument((prev) =>
+        prev ? { ...prev, sync_status: "approved" } : prev
+      );
+      void loadDocuments();
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : "Failed to approve document.");
+    } finally {
+      setReviewLoading(false);
+    }
+  }
+
+  async function rejectDocument(): Promise<void> {
+    if (!selectedDocumentId) return;
+    const reason = rejectReasonInput.trim();
+    if (!reason) {
+      setReviewError("Please enter a reason for rejection.");
+      return;
+    }
+    setReviewLoading(true);
+    setReviewError(null);
+    try {
+      const res = await fetch(`/api/documents/${selectedDocumentId}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason, reviewedBy: "ui" }),
+      });
+      const payload = await res.json();
+      if (!res.ok || !payload.success) {
+        throw new Error(payload.error || "Failed to reject document.");
+      }
+      setSelectedDocument((prev) =>
+        prev ? { ...prev, sync_status: "rejected" } : prev
+      );
+      setShowRejectForm(false);
+      setRejectReasonInput("");
+      void loadDocuments();
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : "Failed to reject document.");
+    } finally {
+      setReviewLoading(false);
+    }
   }
 
   return (
@@ -576,186 +737,289 @@ export default function DocumentsWorkspace() {
               </button>
 
               <aside
-                className={`absolute inset-y-0 z-30 flex w-[min(44vw,680px)] min-w-[400px] max-w-[75vw] flex-col border-l border-slate-200 bg-slate-50 shadow-2xl transition-transform duration-300 ${
+                className={`absolute inset-y-0 right-0 z-30 flex w-[min(72vw,1180px)] min-w-[760px] max-w-[92vw] flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-300 ${
                   previewOpen ? "translate-x-0" : "pointer-events-none translate-x-full"
                 }`}
-                style={{ right: "0px" }}
               >
-                <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">File Preview</p>
-                    <p className="max-w-[420px] truncate text-xs text-slate-500">
-                      {selectedDocument?.file_name || activeContext?.fileName || "Select a source file"}
-                    </p>
+                <div className="flex h-full min-h-0 flex-col">
+                  <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">File Preview</p>
+                      <p className="max-w-[640px] truncate text-xs text-slate-500">
+                        {selectedDocument?.file_name || activeContext?.fileName || "Select a source file"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewOpen(false)}
+                      className="rounded-lg border border-slate-200 p-1.5 text-slate-600 transition-colors hover:bg-slate-100"
+                      aria-label="Collapse preview panel"
+                    >
+                      <span className="material-symbols-outlined text-base">chevron_right</span>
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewOpen(false)}
-                    className="rounded-lg border border-slate-200 p-1.5 text-slate-600 transition-colors hover:bg-slate-100"
-                    aria-label="Collapse preview panel"
-                  >
-                    <span className="material-symbols-outlined text-base">chevron_right</span>
-                  </button>
-                </div>
 
-                <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewTab("file")}
-                    className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-                      previewTab === "file"
-                        ? "bg-slate-900 text-white"
-                        : "text-slate-600 hover:bg-slate-100"
-                    }`}
-                  >
-                    File
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewTab("text")}
-                    className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-                      previewTab === "text"
-                        ? "bg-slate-900 text-white"
-                        : "text-slate-600 hover:bg-slate-100"
-                    }`}
-                  >
-                    OCR Text
-                  </button>
-                </div>
+                  <div className="min-h-0 flex flex-1">
+                    <div className="flex min-w-0 flex-1 flex-col border-r border-slate-200 bg-white">
+                      <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewTab("file")}
+                          className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                            previewTab === "file"
+                              ? "bg-slate-900 text-white"
+                              : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          File
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewTab("text")}
+                          className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                            previewTab === "text"
+                              ? "bg-slate-900 text-white"
+                              : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          OCR Text
+                        </button>
+                        {activeContext ? (
+                          <span className="ml-auto rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                            AI focus{activeContext.page ? ` · page ${activeContext.page}` : ""}
+                          </span>
+                        ) : null}
+                      </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                  {detailLoading || previewLoading ? (
-                    <p className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">
-                      Loading preview...
-                    </p>
-                  ) : null}
-
-                  {detailError || previewError ? (
-                    <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                      {detailError || previewError}
-                    </p>
-                  ) : null}
-
-                  {!detailLoading && !previewLoading && !detailError && !previewError ? (
-                    <div className="space-y-3">
-                      {activeContext ? (
-                        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                            AI Focus
-                          </p>
-                          <p className="mt-1 text-xs text-emerald-700">Query: "{activeContext.query}"</p>
-                          {activeContext.quote ? (
-                            <p className="mt-2 rounded-md bg-white/70 p-2 text-sm text-slate-800">
-                              "{activeContext.quote}"
-                            </p>
-                          ) : null}
-                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-emerald-700">
-                            {activeContext.page ? <span>Page {activeContext.page}</span> : null}
-                            {activeContext.token ? <span>Token: {activeContext.token}</span> : null}
+                      <div className="min-h-0 flex-1">
+                        {detailLoading || previewLoading ? (
+                          <div className="flex h-full items-center justify-center bg-slate-100 text-sm text-slate-600">
+                            Loading preview...
                           </div>
-                          {activeContext.facts.length > 0 ? (
-                            <div className="mt-3 grid grid-cols-1 gap-1.5">
-                              {activeContext.facts.map((fact) => (
-                                <p key={`${fact.label}-${fact.value}`} className="text-xs text-slate-700">
-                                  <span className="font-semibold">{fact.label}:</span> {fact.value}
-                                </p>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
+                        ) : null}
 
-                      {previewTab === "file" ? (
-                        <div className="overflow-hidden rounded-lg border border-slate-200 bg-black">
-                          {previewAsset && pdfPreviewUrl ? (
-                            isImageMime(previewAsset.mimeType) ? (
-                              <div className="relative">
-                                <img
-                                  src={previewAsset.url}
-                                  alt={previewAsset.fileName}
-                                  className="max-h-[560px] w-full object-contain"
-                                />
-                                {activeContext?.coords ? (
-                                  <div
-                                    className="pointer-events-none absolute border-2 border-amber-400 bg-amber-300/25 shadow-[0_0_0_2px_rgba(251,191,36,0.35)]"
-                                    style={{
-                                      left: `${activeContext.coords.x * 100}%`,
-                                      top: `${activeContext.coords.y * 100}%`,
-                                      width: `${activeContext.coords.w * 100}%`,
-                                      height: `${activeContext.coords.h * 100}%`,
-                                    }}
+                        {detailError || previewError ? (
+                          <div className="p-3">
+                            <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                              {detailError || previewError}
+                            </p>
+                          </div>
+                        ) : null}
+
+                        {!detailLoading && !previewLoading && !detailError && !previewError ? (
+                          previewTab === "file" ? (
+                            <div className="h-full bg-slate-900">
+                              {previewAsset && pdfPreviewUrl ? (
+                                isImageMime(previewAsset.mimeType) ? (
+                                  <div className="relative h-full">
+                                    <img
+                                      src={previewAsset.url}
+                                      alt={previewAsset.fileName}
+                                      className="h-full w-full object-contain"
+                                    />
+                                    {activeContext?.coords ? (
+                                      <div
+                                        className="pointer-events-none absolute border-2 border-yellow-300 bg-yellow-300/25 shadow-[0_0_0_2px_rgba(253,224,71,0.35)]"
+                                        style={{
+                                          left: `${activeContext.coords.x * 100}%`,
+                                          top: `${activeContext.coords.y * 100}%`,
+                                          width: `${activeContext.coords.w * 100}%`,
+                                          height: `${activeContext.coords.h * 100}%`,
+                                        }}
+                                      />
+                                    ) : null}
+                                  </div>
+                                ) : isPdfMime(previewAsset.mimeType) && !pdfFallback ? (
+                                  <PdfHighlightViewer
+                                    url={previewAsset.url}
+                                    highlights={pdfHighlights}
+                                    initialPage={previewPage}
+                                    onLoadError={() => setPdfFallback(true)}
+                                    heightClass="h-full"
                                   />
-                                ) : null}
+                                ) : (
+                                  <iframe
+                                    key={`${pdfPreviewUrl}-${activeContext?.page || 0}-${activeContext?.token || ""}`}
+                                    title="Document file preview"
+                                    src={pdfPreviewUrl}
+                                    className="h-full w-full border-0 bg-slate-900"
+                                  />
+                                )
+                              ) : (
+                                <div className="flex h-full items-center justify-center p-4 text-sm text-slate-300">
+                                  File preview is unavailable for this document.
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="h-full overflow-y-auto bg-white p-3">
+                              <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-800">
+                                {renderTextWithHighlight(selectedDocument?.raw_text || "", activeContext?.token || null)}
+                              </p>
+                            </div>
+                          )
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <aside className="flex w-[320px] shrink-0 flex-col bg-slate-50">
+                      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+                        {activeContext ? (
+                          <div className="rounded-lg border border-slate-200 bg-white p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">AI focus</p>
+                            <p className="mt-1 text-sm font-medium text-slate-900">{activeContext.query}</p>
+                            <p className="mt-1 text-xs text-slate-600">
+                              {activeContext.token ? `Token: ${activeContext.token}` : "Linked from source evidence"}
+                              {activeContext.page ? ` · Page ${activeContext.page}` : ""}
+                            </p>
+                            {activeContext.quote ? (
+                              <p className="mt-2 rounded-md bg-slate-50 px-2 py-1.5 text-xs text-slate-700">
+                                {activeContext.quote}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {selectedDocument && confidenceProfile ? (
+                          <div className="rounded-lg border border-slate-200 bg-white p-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                                {selectedDocument.document_type || "other"}
+                              </span>
+                              <span
+                                className={`rounded-md border px-2 py-1 text-xs font-semibold uppercase tracking-wide ${statusClasses(
+                                  selectedDocument.sync_status
+                                )}`}
+                              >
+                                {selectedDocument.sync_status.replaceAll("_", " ")}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex items-center justify-between">
+                              <p className="text-xs text-slate-500">Trust profile</p>
+                              <span
+                                className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${confidenceProfile.tone.chipClass}`}
+                              >
+                                {confidenceProfile.tone.label} · {confidenceProfile.trustScore}%
+                              </span>
+                            </div>
+                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                              <div
+                                className={`h-full rounded-full ${confidenceProfile.tone.barClass}`}
+                                style={{ width: `${confidenceProfile.trustScore}%` }}
+                              />
+                            </div>
+                            <div className="mt-2 space-y-1 text-[11px] text-slate-600">
+                              <p>Extraction {confidenceProfile.extraction}%</p>
+                              <p>Evidence coverage {confidenceProfile.evidence}%</p>
+                              <p>Context {confidenceProfile.contextSignal}%</p>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {selectedDocument ? (
+                          <div className="rounded-lg border border-slate-200 bg-white p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Document details</p>
+                            <p className="mt-1 text-xs text-slate-600">
+                              Created {formatDate(selectedDocument.created_at)}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-600">
+                              MIME {selectedDocument.mime_type || "unknown"}
+                            </p>
+                            {documentFacts.length > 0 ? (
+                              <div className="mt-2 space-y-1 text-xs text-slate-700">
+                                {documentFacts.map((fact) => (
+                                  <p key={`${fact.label}-${fact.value}`}>
+                                    <span className="font-semibold">{fact.label}:</span> {fact.value}
+                                  </p>
+                                ))}
                               </div>
                             ) : (
-                              <iframe
-                                key={`${pdfPreviewUrl}-${activeContext?.page || 0}-${activeContext?.token || ""}`}
-                                title="Document file preview"
-                                src={pdfPreviewUrl}
-                                className="h-[560px] w-full border-0"
-                              />
-                            )
-                          ) : (
-                            <div className="p-4 text-sm text-slate-300">
-                              File preview is unavailable for this document.
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="rounded-lg border border-slate-200 bg-white p-3">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            OCR Preview
-                          </p>
-                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">
-                            {renderTextWithHighlight(selectedDocument?.raw_text || "", activeContext?.token || null)}
-                          </p>
-                        </div>
-                      )}
+                              <p className="mt-2 text-xs text-slate-500">No extracted fields available.</p>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
 
                       {selectedDocument ? (
-                        <div className="rounded-lg border border-slate-200 bg-white p-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                              {selectedDocument.document_type || "other"}
-                            </span>
-                            <span
-                              className={`rounded-md border px-2 py-1 text-xs font-semibold uppercase tracking-wide ${statusClasses(
-                                selectedDocument.sync_status
-                              )}`}
-                            >
-                              {selectedDocument.sync_status.replaceAll("_", " ")}
-                            </span>
-                            <span className="text-xs text-slate-500">{formatDate(selectedDocument.created_at)}</span>
-                          </div>
-                          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                            <div className="rounded-md bg-slate-50 p-2 text-slate-600">
-                              Confidence{" "}
-                              <span className="font-semibold text-slate-900">
-                                {formatPercent(
-                                  selectedDocument.confidence_score ?? selectedDocument.extraction_confidence
-                                )}
-                              </span>
-                            </div>
-                            <div className="rounded-md bg-slate-50 p-2 text-slate-600">
-                              MIME{" "}
-                              <span className="font-semibold text-slate-900">
-                                {selectedDocument.mime_type || "unknown"}
-                              </span>
-                            </div>
-                          </div>
-                          {documentFacts.length > 0 ? (
-                            <div className="mt-3 space-y-1 text-xs">
-                              {documentFacts.map((fact) => (
-                                <p key={`${fact.label}-${fact.value}`} className="text-slate-700">
-                                  <span className="font-semibold">{fact.label}:</span> {fact.value}
-                                </p>
-                              ))}
-                            </div>
+                        <div className="border-t border-slate-200 bg-white p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Review actions</p>
+                          {reviewError ? (
+                            <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                              {reviewError}
+                            </p>
                           ) : null}
+                          {reviewable ? (
+                            <div className="mt-2 space-y-2">
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void approveDocument()}
+                                  disabled={reviewLoading}
+                                  className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                                >
+                                  {reviewLoading ? "Processing..." : "Approve"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowRejectForm((v) => !v)}
+                                  disabled={reviewLoading}
+                                  className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                              {showRejectForm ? (
+                                <div className="space-y-2">
+                                  <textarea
+                                    value={rejectReasonInput}
+                                    onChange={(event) => setRejectReasonInput(event.target.value)}
+                                    placeholder="Reason for rejection..."
+                                    className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-red-400 focus:outline-none focus:ring-1 focus:ring-red-400"
+                                    rows={2}
+                                  />
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => void rejectDocument()}
+                                      disabled={reviewLoading || !rejectReasonInput.trim()}
+                                      className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                                    >
+                                      Confirm Reject
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShowRejectForm(false);
+                                        setRejectReasonInput("");
+                                        setReviewError(null);
+                                      }}
+                                      className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-xs text-slate-600">
+                              Status:{" "}
+                              <span className="font-semibold capitalize">
+                                {selectedDocument.sync_status.replaceAll("_", " ")}
+                              </span>
+                              {selectedDocument.sync_status === "approved" || selectedDocument.sync_status === "auto_approved"
+                                ? " — No further action needed."
+                                : selectedDocument.sync_status === "rejected"
+                                ? " — This document was rejected."
+                                : selectedDocument.sync_status === "synced"
+                                ? " — Already synced to QuickBooks."
+                                : ""}
+                            </p>
+                          )}
                         </div>
                       ) : null}
-                    </div>
-                  ) : null}
+                    </aside>
+                  </div>
                 </div>
               </aside>
             </>

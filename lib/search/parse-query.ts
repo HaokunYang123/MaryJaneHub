@@ -157,6 +157,23 @@ function parseDocumentType(text: string): { documentType?: string; consumed: str
 }
 
 /**
+ * Extract vendor name from preposition phrases (from/by/for + name)
+ */
+function parseVendor(text: string): { vendor?: string; consumed: string } {
+  // Match "from centerpointe", "by fedex", "for bega cheese" (case-insensitive, 1-3 words)
+  const match = text.match(/\b(?:from|by|for)\s+(\w{2,}(?:\s+\w{2,}){0,2})\b/i);
+  if (!match) return { consumed: "" };
+
+  const candidate = match[1].trim();
+
+  // Stopword guard: skip time expressions, document types, common words
+  const STOPWORDS = /^(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|last|this|next|all|the|my|our|a|an|each|every|invoices?|receipts?|documents?|contracts?|bank|statements?|tax|forms?|files?|\d{4})\b/i;
+  if (STOPWORDS.test(candidate)) return { consumed: "" };
+
+  return { vendor: candidate, consumed: match[0] };
+}
+
+/**
  * Parse a natural language query and extract structured filters
  */
 export function parseQuery(query: string): ParsedQuery {
@@ -184,6 +201,13 @@ export function parseQuery(query: string): ParsedQuery {
     remainingText = remainingText.replace(typeResult.consumed, " ");
   }
 
+  // Extract vendor (after doc type so "invoices from X" correctly picks up X)
+  const vendorResult = parseVendor(remainingText);
+  if (vendorResult.consumed) {
+    consumed.push(vendorResult.consumed);
+    remainingText = remainingText.replace(vendorResult.consumed, " ");
+  }
+
   // Clean up remaining text
   const semanticText = remainingText
     .replace(/\s+/g, " ")
@@ -195,6 +219,7 @@ export function parseQuery(query: string): ParsedQuery {
     month: dateResult.month,
     amount: amountResult.amount,
     documentType: typeResult.documentType,
+    vendor: vendorResult.vendor,
     semanticText,
     originalQuery: query,
   };

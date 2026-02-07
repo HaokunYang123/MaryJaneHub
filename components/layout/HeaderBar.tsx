@@ -7,8 +7,8 @@ interface HeaderBarProps {
 
 export default function HeaderBar({ user }: HeaderBarProps) {
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4">
+    <header className="sticky top-0 z-50 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+      <div className="mx-auto flex w-full max-w-[1660px] items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link href="/dashboard" className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand-green)] text-xl font-black text-white">

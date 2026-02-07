@@ -99,41 +99,45 @@ function matchesVendor(docVendor: string | null, filterVendor: string): boolean 
  * Try to extract vendor name from semantic text
  * Looks for patterns like "from <vendor>", "for <vendor>", or "<vendor> invoices"
  */
-function extractVendorFromSemanticText(semanticText: string): string | null {
+export function extractVendorFromSemanticText(semanticText: string): string | null {
   const skipWords = new Set([
     "all", "the", "last", "this", "year", "month", "total", "sum", "my", "our",
     "find", "show", "list", "get", "what", "how", "much", "many", "did", "do",
     "january", "february", "march", "april", "may", "june", "july", "august",
     "september", "october", "november", "december", "from", "for", "in", "on",
+    "invoices", "invoice", "receipts", "receipt", "documents", "document",
+    "about", "related",
   ]);
 
   const skipPhrases = new Set([
     "all from", "all for", "total from", "total for",
   ]);
 
-  // Pattern: "from/for <vendor>" at end of text (single capitalized word, min 3 chars)
-  const fromForMatch = semanticText.match(/\b(?:from|for)\s+([A-Z][a-zA-Z]{2,})\s*$/i);
-  if (fromForMatch) {
-    const candidate = fromForMatch[1];
-    if (!skipWords.has(candidate.toLowerCase())) {
+  // Pattern: "from/for/about/related to <vendor>" at end of text
+  const prepMatch = semanticText.match(/\b(?:from|for|about|related\s+to)\s+([a-zA-Z][\w&.'-]{1,}(?:\s+[\w&.'-]+)*)\s*$/i);
+  if (prepMatch) {
+    const candidate = prepMatch[1].trim();
+    // Check all words against skip list
+    const words = candidate.split(/\s+/);
+    if (!words.every((w) => skipWords.has(w.toLowerCase()))) {
       return candidate;
     }
   }
 
   // Pattern: "<vendor> invoices/receipts/documents"
-  const beforeTypeMatch = semanticText.match(/\b([A-Z][a-zA-Z]{2,})\s+(?:invoices?|receipts?|documents?)\b/i);
+  const beforeTypeMatch = semanticText.match(/\b([a-zA-Z][\w&.'-]{1,}(?:\s+[\w&.'-]+)*)\s+(?:invoices?|receipts?|documents?)\b/i);
   if (beforeTypeMatch) {
-    const candidate = beforeTypeMatch[1];
-    if (!skipWords.has(candidate.toLowerCase())) {
+    const candidate = beforeTypeMatch[1].trim();
+    const words = candidate.split(/\s+/);
+    if (!words.every((w) => skipWords.has(w.toLowerCase()))) {
       return candidate;
     }
   }
 
-  // Pattern: capitalized word at the end (potential vendor name, min 3 chars)
-  const endMatch = semanticText.match(/\b([A-Z][a-zA-Z]{2,})\s*$/);
+  // Pattern: word at the end (potential vendor name, min 3 chars)
+  const endMatch = semanticText.match(/\b([a-zA-Z][\w&.'-]{2,})\s*$/);
   if (endMatch) {
     const candidate = endMatch[1];
-    // Also check if it's part of a skip phrase
     const lastWords = semanticText.toLowerCase().trim().split(/\s+/).slice(-2).join(" ");
     if (!skipWords.has(candidate.toLowerCase()) && !skipPhrases.has(lastWords)) {
       return candidate;

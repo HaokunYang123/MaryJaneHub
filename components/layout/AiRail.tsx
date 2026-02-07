@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useAiRail } from "./AiRailProvider";
 import type { FactPair, SearchResult, SourceContext } from "./ai-rail-types";
 
@@ -8,7 +10,7 @@ type ConversationContext = {
   history: Array<{ role: "user" | "assistant"; content: string }>;
   pendingClarification?: {
     originalQuery: string;
-    originalIntent: "search" | "single_qa" | "sum" | "rag";
+    originalIntent: "search" | "single_qa" | "sum" | "rag" | "chat";
     question: string;
     timestamp: number;
   };
@@ -18,7 +20,7 @@ type AssistantChatApiResponse = {
   success: boolean;
   data?: {
     type: "answer" | "clarification" | "error";
-    intent: "search" | "single_qa" | "sum" | "rag";
+    intent: "search" | "single_qa" | "sum" | "rag" | "chat";
     message: string;
     sources: SearchResult[];
     context: ConversationContext;
@@ -38,14 +40,14 @@ type ChatMessage = {
 const INITIAL_MESSAGE: ChatMessage = {
   id: "assistant-initial",
   role: "assistant",
-  text: "I stay here across pages. Ask about your business or ask me to find files.",
+  text: "Hi! I'm your business AI. Ask me anything — from 'how's my business?' to 'find invoices from Centerpointe'.",
 };
 
 const SUGGESTED_PROMPTS = [
+  "How is my business doing?",
   "Find invoices from Centerpointe",
   "How much did we spend in 2025?",
-  "Show files pending review",
-  "Summarize vendor spend this month",
+  "What vendors do we work with?",
 ];
 
 function toDisplay(value: unknown): string | null {
@@ -201,47 +203,85 @@ export default function AiRail() {
     openDocumentPreview(source.id, context);
   }
 
+  function startNewChat(): void {
+    setMessages([INITIAL_MESSAGE]);
+    setConversationContext({ history: [] });
+    setQuery("");
+    userNearBottom.current = true;
+  }
+
   return (
     <aside
-      className={`relative z-40 flex shrink-0 flex-col border-l border-slate-200 bg-white text-slate-900 transition-all duration-300 ${
-        railOpen ? "w-[390px]" : "w-14"
+      className={`relative z-20 flex min-h-0 shrink-0 flex-col border-l border-slate-200 bg-white text-slate-900 transition-all duration-300 ${
+        railOpen ? "w-[420px]" : "w-14"
       }`}
       style={{ width: `${railWidth}px` }}
     >
       {railOpen ? (
-        <>
-          <div className="border-b border-slate-200 bg-white px-4 py-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-base font-black tracking-tight text-slate-900">AI Copilot</p>
-                <p className="text-xs text-slate-500">Always-on assistant</p>
+        <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
+          <div className="shrink-0 border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="material-symbols-outlined rounded-md bg-emerald-50 p-1 text-base text-[var(--brand-green)]">
+                  auto_awesome
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-base font-black tracking-tight text-slate-900">AI Copilot</p>
+                  <p className="truncate text-xs text-slate-500">Always-on assistant</p>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setRailOpen(false)}
-                className="rounded-lg border border-slate-200 p-1.5 text-slate-600 transition-colors hover:bg-slate-100"
-                aria-label="Collapse AI panel"
-              >
-                <span className="material-symbols-outlined text-base">chevron_right</span>
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={startNewChat}
+                  className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100"
+                  aria-label="Start new chat"
+                >
+                  New chat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRailOpen(false)}
+                  className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 transition-colors hover:bg-slate-100"
+                  aria-label="Collapse AI panel"
+                >
+                  <span className="material-symbols-outlined text-base">chevron_right</span>
+                </button>
+              </div>
             </div>
           </div>
 
-          <div ref={messagesRef} onScroll={handleMessagesScroll} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+          <div
+            ref={messagesRef}
+            onScroll={handleMessagesScroll}
+            className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3"
+          >
             {messages.map((message) => (
               <div key={message.id} className="space-y-2">
                 <div
-                  className={`rounded-2xl p-3 text-sm whitespace-pre-wrap ${
+                  className={`rounded-2xl p-3 text-sm ${
                     message.role === "user"
-                      ? "ml-6 bg-slate-100 text-slate-900 shadow-sm"
-                      : "mr-6 border border-slate-200 bg-white text-slate-900 shadow-sm"
+                      ? "ml-10 whitespace-pre-wrap bg-slate-200/80 text-slate-900 shadow-sm"
+                      : "mr-8 border border-slate-200 bg-white text-slate-900 shadow-sm"
                   }`}
                 >
-                  {message.text}
+                  {message.role === "assistant" ? (
+                    <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                      <span className="material-symbols-outlined text-xs text-[var(--brand-green)]">auto_awesome</span>
+                      Assistant
+                    </div>
+                  ) : null}
+                  {message.role === "assistant" ? (
+                    <div className="ai-markdown">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    message.text
+                  )}
                 </div>
 
                 {message.sources && message.sources.length > 0 ? (
-                  <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                  <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
                     <div className="flex items-center gap-2 px-1">
                       <span className="material-symbols-outlined text-sm text-[var(--brand-green)]">data_object</span>
                       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-green)]">
@@ -256,7 +296,7 @@ export default function AiRail() {
                           key={`${message.id}-${source.id}`}
                           type="button"
                           onClick={() => openFromSource(source, message.query || "")}
-                          className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--brand-green)]/50 hover:bg-emerald-50"
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--brand-green)]/50 hover:bg-emerald-50"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <p className="line-clamp-2 text-xs font-semibold text-slate-900">{source.fileName}</p>
@@ -286,48 +326,56 @@ export default function AiRail() {
                 ) : null}
               </div>
             ))}
+
+            {messages.length <= 1 && (
+              <div className="mt-auto flex flex-wrap gap-1.5 pt-4">
+                {SUGGESTED_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => void runSearch(prompt)}
+                    disabled={thinking}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="border-t border-slate-200 bg-white p-3">
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {SUGGESTED_PROMPTS.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  onClick={() => void runSearch(prompt)}
-                  disabled={thinking}
-                  className="rounded-full border border-slate-200 px-2 py-1 text-[11px] text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-100 disabled:opacity-40"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-
-            <form onSubmit={handleSubmit}>
-              <label htmlFor="global-ai-query" className="mb-1 block text-xs text-slate-500">
-                Ask the copilot
-              </label>
-              <div className="flex gap-2">
+          <div className="shrink-0 border-t border-slate-200 bg-white px-3 py-2">
+            <form onSubmit={handleSubmit} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-2 px-3 py-2">
                 <input
                   id="global-ai-query"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Ask about business or files..."
-                  className="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[var(--brand-green)]"
+                  className="flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
                 />
                 <button
                   type="submit"
                   disabled={thinking || query.trim().length === 0}
-                  className="rounded-xl bg-[var(--brand-green)] px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--brand-green)] text-white transition-opacity disabled:opacity-30"
                 >
-                  {thinking ? "..." : "Ask"}
+                  <span className="material-symbols-outlined text-base">
+                    {thinking ? "more_horiz" : "arrow_upward"}
+                  </span>
                 </button>
+              </div>
+              <div className="flex items-center justify-between border-t border-slate-100 px-3 py-1.5 text-slate-400">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-base">add</span>
+                  <span className="material-symbols-outlined text-base">tune</span>
+                </div>
+                <span className="text-[11px]">Business + file assistant</span>
               </div>
             </form>
           </div>
-        </>
+        </div>
       ) : (
-        <div className="flex h-full flex-col items-center justify-start gap-3 border-l border-slate-200 pt-3">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-start gap-3 pt-3">
           <button
             type="button"
             onClick={() => setRailOpen(true)}

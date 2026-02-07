@@ -197,6 +197,68 @@ const RULES: Rule[] = [
     }),
   },
 
+  // === CHAT INTENT (greetings, casual, and broad business questions) ===
+  {
+    name: "chat_greeting",
+    patterns: [
+      /^(?:hi|hello|hey|good\s+(?:morning|afternoon|evening)|thanks|thank\s+you|sup|yo|howdy)\b/i,
+    ],
+    intent: "chat",
+    baseConfidence: 0.95,
+  },
+  {
+    name: "chat_casual",
+    patterns: [
+      /^(?:how\s+are\s+you|what\s+can\s+you\s+do|help|what\s+do\s+you\s+know)\b/i,
+    ],
+    intent: "chat",
+    baseConfidence: 0.92,
+  },
+  {
+    name: "chat_overview",
+    patterns: [
+      /\bhow\s+(?:is|are)\s+(?:my|our|the)\s+business\b/i,
+      /\bgive\s+(?:me\s+)?(?:a\s+)?(?:business\s+)?(?:overview|snapshot|status|summary)\b/i,
+      /\bbusiness\s+(?:status|overview|snapshot|summary|health)\b/i,
+      /\bhow\s+(?:are|is)\s+(?:things|everything)\s+(?:going|looking|doing)\b/i,
+    ],
+    intent: "chat",
+    baseConfidence: 0.92,
+  },
+  {
+    name: "chat_vendors",
+    patterns: [
+      /\bwhat\s+vendors?\s+do\s+(?:we|i)\s+(?:work|deal)\s+with\b/i,
+      /\bwho\s+(?:do|did)\s+(?:we|i)\s+(?:do\s+business|work)\s+with\b/i,
+      /\blist\s+(?:our|my|all)\s+vendors?\b/i,
+      /\bwho\s+are\s+(?:our|my)\s+(?:vendors?|suppliers?|providers?)\b/i,
+    ],
+    intent: "chat",
+    baseConfidence: 0.92,
+  },
+  {
+    name: "chat_focus",
+    patterns: [
+      /\bwhat\s+should\s+(?:I|we)\s+focus\s+on\b/i,
+      /\bwhat\s+needs?\s+(?:my\s+)?attention\b/i,
+      /\bwhat(?:'s|\s+is)\s+pending\b/i,
+      /\bany(?:thing)?\s+(?:that\s+)?needs?\s+(?:review|attention|action)\b/i,
+    ],
+    intent: "chat",
+    baseConfidence: 0.90,
+  },
+  {
+    name: "chat_spending",
+    patterns: [
+      /\bwhere\s+(?:does|did|is)\s+(?:my|our)\s+money\s+go\b/i,
+      /\b(?:biggest|largest|top)\s+(?:expenses?|spending|costs?)\b/i,
+      /\bspending\s+(?:breakdown|overview|summary)\b/i,
+      /\bbreak(?:\s+)?down\s+(?:my|our)\s+(?:spending|expenses?|costs?)\b/i,
+    ],
+    intent: "chat",
+    baseConfidence: 0.90,
+  },
+
   // === RAG INTENT (relationship/analysis questions) ===
   {
     name: "rag_relationship",
@@ -228,6 +290,18 @@ const RULES: Rule[] = [
   },
 
   // === SEARCH INTENT (find/list documents) ===
+  {
+    name: "search_natural",
+    patterns: [
+      /\b(?:can|could|would)\s+you\s+(?:find|search|look\s+for|get|show|pull\s+up)\b/i,
+      /\b(?:i\s+need|i'm\s+looking|looking)\s+(?:to\s+find|for)\b/i,
+      /\bdo\s+(?:you|we)\s+have\s+(?:any|a|the)?\s*(?:files?|documents?|invoices?|receipts?)/i,
+      /\bwhere\s+(?:is|are)\s+(?:the|my|our)\s+(?:\w+\s+)?(?:files?|documents?|invoices?|receipts?)/i,
+      /\bpull\s+up\b/i,
+    ],
+    intent: "search",
+    baseConfidence: 0.90,
+  },
   {
     name: "search_explicit",
     patterns: [
@@ -318,6 +392,10 @@ export function matchRules(query: string, slots: Slots): RuleMatch | null {
     for (const pattern of rule.patterns) {
       const match = query.match(pattern);
       if (match) {
+        // Analytics guard: skip search_natural for analysis/trend queries → let model classify as rag/sum
+        if (rule.name === "search_natural" && /\b(?:trend|pattern|money\s+flow|over\s+time|why|compar|analy)/i.test(query)) {
+          continue;
+        }
         // Calculate confidence boost based on slots
         let confidenceBoost = 0;
 
@@ -379,16 +457,21 @@ export function inferIntentFromSlots(slots: Slots): RuleMatch | null {
     };
   }
 
-  // If only semantic text, could be anything
-  if (slots.semanticText.length > 10) {
+  // If semantic text with document-specific slots, try rag
+  if (slots.semanticText.length > 10 && (slots.vendor || slots.documentType)) {
     return {
       intent: "rag",
       confidence: 0.4,
-      reasoning: "Fallback to RAG for open-ended query",
+      reasoning: "Fallback to RAG for query with document-specific slots",
     };
   }
 
-  return null;
+  // General unrecognized query → chat (above clarification threshold)
+  return {
+    intent: "chat",
+    confidence: slots.semanticText.length > 10 ? 0.7 : 0.75,
+    reasoning: "No document-specific slots, defaulting to chat",
+  };
 }
 
 /**

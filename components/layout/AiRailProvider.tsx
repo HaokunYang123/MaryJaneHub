@@ -26,7 +26,7 @@ type AiRailContextValue = {
 
 const AiRailContext = createContext<AiRailContextValue | null>(null);
 
-const OPEN_WIDTH = 390;
+const OPEN_WIDTH = 420;
 const CLOSED_WIDTH = 56;
 const STORAGE_KEY = "mj.aiRailOpen";
 

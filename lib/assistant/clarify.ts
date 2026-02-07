@@ -7,7 +7,7 @@
 
 import { createHash } from "crypto";
 import { parseQuery } from "../search/parse-query";
-import { routeQuerySync } from "./router";
+import { routeQuery, routeQuerySync, CONFIDENCE_THRESHOLD, getConfidenceLevel } from "./router";
 import type {
   Slots,
   Intent,
@@ -25,6 +25,7 @@ import { answerSingleDocumentQuestion } from "./single-qa";
 import { executeSearch } from "./search-handler";
 import { executeSum, formatSumResult } from "./sum-handler";
 import { executeRAG, formatRAGResult } from "./rag-handler";
+import { executeChat, formatChatResult } from "./chat-handler";
 import type { AuditCitation } from "../audit/logger";
 import { appendAudit, finalizeAudit, startAudit } from "../audit/logger";
 import { INSUFFICIENT_INFO_MESSAGE } from "./messages";
@@ -84,6 +85,7 @@ export interface AssistantHandlers {
   executeSearch: typeof executeSearch;
   executeSum: typeof executeSum;
   executeRAG: typeof executeRAG;
+  executeChat: typeof executeChat;
   answerSingleDocumentQuestion: typeof answerSingleDocumentQuestion;
 }
 
@@ -92,6 +94,7 @@ function resolveAssistantHandlers(overrides?: Partial<AssistantHandlers>): Assis
     executeSearch,
     executeSum,
     executeRAG,
+    executeChat,
     answerSingleDocumentQuestion,
     ...overrides,
   };
@@ -330,15 +333,19 @@ export async function handleFollowUp(
   const routerResult = routeQuerySync(enrichedQuery);
 
   // Override with merged slots and original intent
+  // Recalculate needsClarification from boosted score (don't spread old value)
+  const boostedScore = Math.min(1.0, routerResult.confidenceScore + 0.2);
   return {
     routerResult: {
       ...routerResult,
       intent: state.originalIntent,
       slots: mergedSlots,
-      // Boost confidence since we now have more info
-      confidenceScore: Math.min(1.0, routerResult.confidenceScore + 0.2),
-      confidence: routerResult.confidenceScore + 0.2 >= 0.85 ? "high" :
-                  routerResult.confidenceScore + 0.2 >= 0.7 ? "medium" : "low",
+      confidenceScore: boostedScore,
+      confidence: getConfidenceLevel(boostedScore),
+      needsClarification: boostedScore < CONFIDENCE_THRESHOLD,
+      clarifyingQuestion: boostedScore < CONFIDENCE_THRESHOLD
+        ? routerResult.clarifyingQuestion
+        : undefined,
     },
   };
 }
@@ -469,6 +476,8 @@ export async function handleAssistantQuery(
         role: "assistant",
         content: searchResult.message,
       });
+      ctx.lastIntent = routerResult.intent;
+      ctx.lastSlots = routerResult.slots;
 
       if (auditRequestId) {
         await appendAudit(auditRequestId, {
@@ -489,6 +498,13 @@ export async function handleAssistantQuery(
         message: searchResult.message,
         type: searchResult.success ? "answer" : "error",
         auditRequestId,
+        searchResults: searchResult.results.map((r) => ({
+          id: r.id,
+          fileName: r.fileName,
+          documentType: r.documentType,
+          score: r.score,
+          extraction: r.extraction,
+        })),
         context: ctx,
       };
     }
@@ -502,6 +518,8 @@ export async function handleAssistantQuery(
         role: "assistant",
         content: message,
       });
+      ctx.lastIntent = routerResult.intent;
+      ctx.lastSlots = routerResult.slots;
 
       if (auditRequestId) {
         await appendAudit(auditRequestId, {
@@ -550,6 +568,10 @@ export async function handleAssistantQuery(
         role: "assistant",
         content: message,
       });
+      if (!isRagError) {
+        ctx.lastIntent = routerResult.intent;
+        ctx.lastSlots = routerResult.slots;
+      }
 
       if (auditRequestId) {
         const citations = buildCitationMetadata(ragResult.citations || []);
@@ -573,6 +595,37 @@ export async function handleAssistantQuery(
         message,
         type: isRagError || ragResult.confidence === "low" ? "error" : "answer",
         ragResult,
+        auditRequestId,
+        context: ctx,
+      };
+    }
+
+    // Handle chat intent with merged slots
+    if (routerResult.intent === "chat") {
+      const chatResult = await handlers.executeChat(originalQuestion, routerResult.slots, { mode, history: ctx.history });
+      const message = formatChatResult(chatResult);
+
+      ctx.history.push({ role: "assistant", content: message });
+      ctx.lastIntent = routerResult.intent;
+      ctx.lastSlots = routerResult.slots;
+
+      if (auditRequestId) {
+        await appendAudit(auditRequestId, {
+          intent: "chat",
+          confidence: routerResult.confidence,
+          slots: sanitizeSlots(routerResult.slots),
+        });
+        await finalizeAudit(auditRequestId, {
+          status: "success",
+          output_hash: hashText(message),
+          output_summary: summarizeText(message),
+        });
+      }
+
+      return {
+        message,
+        type: "answer",
+        chatResult,
         auditRequestId,
         context: ctx,
       };
@@ -602,8 +655,100 @@ export async function handleAssistantQuery(
     };
   }
 
-  // Normal flow - route the query
-  const routerResult = routeQuerySync(query);
+  // Check for elliptical follow-up referencing previous turn
+  if (!ctx.pendingClarification && ctx.lastIntent && ctx.lastSlots) {
+    const words = query.trim().split(/\s+/);
+    const isShort = words.length <= 10;
+    const referentialWords = /\b(correct|right|those|that|it|them|more|other|instead|one|ones|these|which|same|again|else|different)\b/i;
+    const hasReferential = referentialWords.test(query);
+    // Check that this doesn't have a strong intent signal of its own
+    const hasStrongIntent = /\b(find|show|search|how much|total|sum|what is|list|get)\b/i.test(query);
+
+    if (isShort && hasReferential && !hasStrongIntent) {
+      console.log(`[Assistant] Elliptical follow-up detected: "${query}" → re-entering ${ctx.lastIntent} flow`);
+      const syntheticState = createClarificationState(
+        ctx.history.filter((m) => m.role === "user").slice(-2, -1)[0]?.content || query,
+        ctx.lastSlots,
+        ctx.lastIntent,
+        query,
+      );
+      const { routerResult: followUpResult } = await handleFollowUp(query, syntheticState);
+
+      // Process with the carried-over intent
+      ctx.pendingClarification = undefined;
+
+      if (auditRequestId) {
+        await appendAudit(auditRequestId, {
+          intent: followUpResult.intent,
+          confidence: followUpResult.confidence,
+          slots: sanitizeSlots(followUpResult.slots),
+        });
+      }
+
+      // Dispatch to the correct handler
+      if (followUpResult.intent === "search") {
+        const searchResult = await handlers.executeSearch(followUpResult.slots);
+        ctx.history.push({ role: "assistant", content: searchResult.message });
+        ctx.lastIntent = followUpResult.intent;
+        ctx.lastSlots = followUpResult.slots;
+
+        if (auditRequestId) {
+          await appendAudit(auditRequestId, {
+            intent: "search",
+            retrieval: { document_ids: searchResult.results.map((r) => r.id) },
+          });
+          await finalizeAudit(auditRequestId, {
+            status: searchResult.success ? "success" : "error",
+            output_hash: hashText(searchResult.message),
+            output_summary: summarizeText(searchResult.message),
+          });
+        }
+
+        return {
+          message: searchResult.message,
+          type: searchResult.success ? "answer" : "error",
+          auditRequestId,
+          searchResults: searchResult.results.map((r) => ({
+            id: r.id,
+            fileName: r.fileName,
+            documentType: r.documentType,
+            score: r.score,
+            extraction: r.extraction,
+          })),
+          context: ctx,
+        };
+      }
+
+      if (followUpResult.intent === "sum") {
+        const sumResult = await handlers.executeSum(followUpResult.slots);
+        const message = formatSumResult(sumResult, followUpResult.slots);
+        ctx.history.push({ role: "assistant", content: message });
+        ctx.lastIntent = followUpResult.intent;
+        ctx.lastSlots = followUpResult.slots;
+
+        if (auditRequestId) {
+          await finalizeAudit(auditRequestId, {
+            status: "success",
+            output_hash: hashText(message),
+            output_summary: summarizeText(message),
+          });
+        }
+
+        return {
+          message,
+          type: "answer",
+          sumResult,
+          auditRequestId,
+          context: ctx,
+        };
+      }
+
+      // For other intents, fall through to normal routing below
+    }
+  }
+
+  // Normal flow - route the query (async enables Gemini model fallback)
+  const routerResult = await routeQuery(query);
   console.log(`[Assistant] Routed: intent=${routerResult.intent}, confidence=${routerResult.confidence}`);
 
   if (auditRequestId) {
@@ -663,6 +808,8 @@ export async function handleAssistantQuery(
       role: "assistant",
       content: searchResult.message,
     });
+    ctx.lastIntent = routerResult.intent;
+    ctx.lastSlots = routerResult.slots;
 
     if (auditRequestId) {
       await appendAudit(auditRequestId, {
@@ -683,6 +830,13 @@ export async function handleAssistantQuery(
       message: searchResult.message,
       type: searchResult.success ? "answer" : "error",
       auditRequestId,
+      searchResults: searchResult.results.map((r) => ({
+        id: r.id,
+        fileName: r.fileName,
+        documentType: r.documentType,
+        score: r.score,
+        extraction: r.extraction,
+      })),
       context: ctx,
     };
   }
@@ -695,6 +849,8 @@ export async function handleAssistantQuery(
       role: "assistant",
       content: message,
     });
+    ctx.lastIntent = routerResult.intent;
+    ctx.lastSlots = routerResult.slots;
 
     if (auditRequestId) {
       await appendAudit(auditRequestId, {
@@ -742,6 +898,10 @@ export async function handleAssistantQuery(
       role: "assistant",
       content: message,
     });
+    if (!isRagError) {
+      ctx.lastIntent = routerResult.intent;
+      ctx.lastSlots = routerResult.slots;
+    }
 
     if (auditRequestId) {
       const citations = buildCitationMetadata(ragResult.citations || []);
@@ -765,6 +925,36 @@ export async function handleAssistantQuery(
       message,
       type: isRagError || ragResult.confidence === "low" ? "error" : "answer",
       ragResult,
+      auditRequestId,
+      context: ctx,
+    };
+  }
+
+  if (routerResult.intent === "chat") {
+    const chatResult = await handlers.executeChat(query, routerResult.slots, { mode, history: ctx.history });
+    const message = formatChatResult(chatResult);
+
+    ctx.history.push({ role: "assistant", content: message });
+    ctx.lastIntent = routerResult.intent;
+    ctx.lastSlots = routerResult.slots;
+
+    if (auditRequestId) {
+      await appendAudit(auditRequestId, {
+        intent: "chat",
+        confidence: routerResult.confidence,
+        slots: sanitizeSlots(routerResult.slots),
+      });
+      await finalizeAudit(auditRequestId, {
+        status: "success",
+        output_hash: hashText(message),
+        output_summary: summarizeText(message),
+      });
+    }
+
+    return {
+      message,
+      type: "answer",
+      chatResult,
       auditRequestId,
       context: ctx,
     };

@@ -9,7 +9,7 @@ import type { ParsedQuery } from "../search/parse-query";
 /**
  * User intent categories
  */
-export type Intent = "search" | "single_qa" | "sum" | "rag";
+export type Intent = "search" | "single_qa" | "sum" | "rag" | "chat";
 
 /**
  * Assistant response mode
@@ -24,6 +24,7 @@ export const INTENT_DESCRIPTIONS: Record<Intent, string> = {
   single_qa: "Question about a specific document field",
   sum: "Numerical aggregation (totals, counts, averages)",
   rag: "Synthesized answer across multiple documents",
+  chat: "General conversation, greetings, or broad business questions",
 };
 
 /**
@@ -110,6 +111,7 @@ export const REQUIRED_SLOTS: Record<Intent, (keyof Slots)[]> = {
   single_qa: ["field"], // Need to know what field to query
   sum: ["aggregation"], // Need to know what aggregation
   rag: [], // RAG can work with semantic text alone
+  chat: [], // Chat needs no specific slots
 };
 
 /**
@@ -120,6 +122,7 @@ export const RECOMMENDED_SLOTS: Record<Intent, (keyof Slots)[]> = {
   single_qa: ["documentType", "vendor"],
   sum: ["documentType", "year"],
   rag: ["vendor", "year"],
+  chat: [],
 };
 
 // ============================================================================
@@ -222,6 +225,10 @@ export interface ConversationContext {
   history: ConversationMessage[];
   /** Pending clarification if waiting for user response */
   pendingClarification?: ClarificationState;
+  /** Last successful intent (for follow-up carry-over) */
+  lastIntent?: Intent;
+  /** Last successful slots (for follow-up carry-over) */
+  lastSlots?: Slots;
 }
 
 /**
@@ -240,8 +247,18 @@ export interface AssistantResponse {
   sumResult?: SumResult;
   /** If rag, the RAG result */
   ragResult?: RAGResult;
+  /** If chat, the business context result */
+  chatResult?: ChatResult;
   /** If clarification, the candidates */
   candidates?: CandidateDocument[];
+  /** Filtered search results for source cards (search intent only) */
+  searchResults?: Array<{
+    id: string;
+    fileName: string;
+    documentType: string | null;
+    score: number;
+    extraction: Record<string, unknown>;
+  }>;
   /** Updated conversation context */
   context: ConversationContext;
 }
@@ -329,4 +346,25 @@ export interface RAGResult {
   totalAmount?: number;
   /** Date range of relevant documents */
   dateRange?: { earliest: string; latest: string };
+}
+
+// ============================================================================
+// Chat / Business Context Types
+// ============================================================================
+
+export interface BusinessContext {
+  totalDocuments: number;
+  typeCounts: Record<string, number>;
+  statusCounts: Record<string, number>;
+  vendorSpend: { vendor: string; total: number; count: number }[];
+  totalSpend: number;
+  dateRange: { earliest: string; latest: string } | null;
+  avgConfidence: number;
+  recentDocuments: { fileName: string; type: string; vendor: string; total: number; date: string }[];
+}
+
+export interface ChatResult {
+  answer: string;
+  context?: BusinessContext;
+  confidence: ConfidenceLevel;
 }

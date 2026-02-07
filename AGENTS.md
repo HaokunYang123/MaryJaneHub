@@ -75,7 +75,11 @@ Also log non-obvious learnings (e.g., "X library doesn't support Y") to avoid re
 - Keep entries concise: one line per task, one sentence per decision
 - Keep `/docs/ops/drive-management-strategy.md` as the living note for Google Drive AI-management discussions; update it continuously as requirements/decisions evolve.
 - Keep `/docs/ops/founder-todo.md` as the owner reminder checklist.
+- Keep `/docs/ops/collaboration-boundary.md` as the temporary multi-developer boundary contract while tracks are split.
 - Whenever a critical user-side action is identified, add it to `/docs/ops/founder-todo.md` immediately in simple checkbox format.
 - Keep founder TODO entries concise and readable (short action lines only, no long explanations).
 - When an item is completed, mark it done by checking the same TODO item instead of rewriting history.
 - For Drive AI-management rollout, implement backend APIs/guards first; frontend is optional for controls and can be added after backend behavior is stable.
+- For global rails/drawers, keep header z-index above content overlays and use bounded shell overflow (`flex-1 min-h-0 overflow-hidden`) to prevent header overlap regressions.
+- While collaboration boundary is active, any banking-track AI session must read `/docs/ops/collaboration-boundary.md` first and stay within allowed banking scope only.
+- Remove the temporary collaboration-boundary rules from AGENTS only after both tracks are joined and integration is validated.

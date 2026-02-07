@@ -158,7 +158,9 @@ function resolveLayoutMatch(
           startIndex >= segment.startIndex && startIndex < segment.endIndex;
         const intersects =
           endIndex > segment.startIndex && endIndex <= segment.endIndex;
-        return overlaps || intersects;
+        const contains =
+          startIndex <= segment.startIndex && endIndex >= segment.endIndex;
+        return overlaps || intersects || contains;
       });
       if (!matches) continue;
       return {

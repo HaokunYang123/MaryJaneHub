@@ -28,3 +28,67 @@ body {
     "GRAD" 0,
     "opsz" 24;
 }
+
+/* AI Rail markdown styles */
+.ai-markdown p {
+  margin: 0.25em 0;
+}
+.ai-markdown p:first-child {
+  margin-top: 0;
+}
+.ai-markdown p:last-child {
+  margin-bottom: 0;
+}
+.ai-markdown ul,
+.ai-markdown ol {
+  margin: 0.25em 0;
+  padding-left: 1.25em;
+}
+.ai-markdown li {
+  margin: 0.15em 0;
+}
+.ai-markdown strong {
+  font-weight: 600;
+}
+.ai-markdown h1,
+.ai-markdown h2,
+.ai-markdown h3 {
+  font-weight: 700;
+  margin: 0.5em 0 0.25em;
+}
+.ai-markdown h1 { font-size: 1.1em; }
+.ai-markdown h2 { font-size: 1.05em; }
+.ai-markdown h3 { font-size: 1em; }
+.ai-markdown code {
+  background: #f1f5f9;
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+.ai-markdown pre {
+  background: #f1f5f9;
+  padding: 0.5em;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.25em 0;
+}
+.ai-markdown pre code {
+  background: none;
+  padding: 0;
+}
+.ai-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5em 0;
+  font-size: 0.85em;
+}
+.ai-markdown th,
+.ai-markdown td {
+  border: 1px solid #e2e8f0;
+  padding: 0.25em 0.5em;
+  text-align: left;
+}
+.ai-markdown th {
+  background: #f8fafc;
+  font-weight: 600;
+}

@@ -19,6 +19,7 @@ export {
 export { executeSearch } from "./search-handler";
 export { executeSum, formatSumResult } from "./sum-handler";
 export { executeRAG, formatRAGResult } from "./rag-handler";
+export { executeChat, formatChatResult } from "./chat-handler";
 export type {
   Intent,
   Slots,
@@ -38,5 +39,7 @@ export type {
   CandidateDocument,
   AssistantResponse,
   AssistantMode,
+  ChatResult,
+  BusinessContext,
 } from "./types";
 export { INTENT_DESCRIPTIONS, REQUIRED_SLOTS, RECOMMENDED_SLOTS } from "./types";

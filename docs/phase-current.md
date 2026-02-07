@@ -41,6 +41,18 @@ Backfill documents with high quality while keeping OCR cost low via dedupe and a
 - [x] Globalize AI rail across app shell — make AI panel persistent on every page and route source-click preview into `/documents` overlay.
 - [x] Add unified assistant chat endpoint for global AI rail — route intent-aware chat in one API and return sources only when available.
 - [x] Fix preview anchor alignment after global rail move — slide preview from rail edge without dim overlay and remove stale rail-width offset.
+- [x] Polish preview-first document UX — make PDF dominant, simplify secondary cards, and replace single confidence number with trust profile.
+- [x] Fix header/rail layering + simplify preview to file-first layout — keep top bar above AI rail and move non-preview metadata/actions into a dedicated info column.
+- [x] UX validation for preview/chat stability — prevent stale preview races, preserve manual chat scroll position, and recover cleanly after assistant API errors.
+- [x] Add PDF highlight overlays with pdf.js — render controlled PDF canvas with search and field-evidence highlight boxes plus fallback to iframe preview.
+- [x] Fix PDF highlight overlap bug — include segment containment in layout matching so multi-segment matches still produce coordinates.
+- [x] Widen preview panel + dynamic height baseline — increase overlay width and remove fixed pixel preview heights.
+- [x] Add approve/reject review controls to preview panel — wire review actions to existing approve/reject APIs with inline reject reason flow.
+- [x] Add temporary collaboration boundary for parallel banking development — document protected scope and AI-agent guardrails so banking work does not interrupt active file-system track.
+- [x] Fix AI rail vertical fill to bottom of viewport — use viewport-locked app shell height so chat panel no longer collapses to content height.
+- [x] Harden AI rail bottom anchoring across browsers — switch rail interior to explicit 3-row grid so message area fills middle and input stays pinned at bottom.
+- [x] Redesign AI rail structure to workspace-style sidebar — top utility bar, long conversation surface, and pinned bottom composer while keeping MaryJane visual language.
+- [x] Remove shell footer from workspace layout — allow AI rail to reach viewport bottom with no extra bottom strip.
 
 ## Progress
 Adaptive worker concurrency with throttle backoff: Done — adaptive scaling + env knobs added.
@@ -84,6 +96,35 @@ Convert preview to anchored overlay drawer: Done — preview no longer consumes 
 Globalize AI rail across app shell: Done — moved AI rail to `AppShell`, removed local `/documents` chat rail, and wired cross-page source clicks to open `/documents` preview with context via shared provider.
 Add unified assistant chat endpoint for global AI rail: Done — added `/api/assistant/chat` (auth + intent routing via assistant core), wired `AiRail` to post conversation context there, and kept source cards conditional with clickable preview linkage.
 Fix preview anchor alignment after global rail move: Done — removed stale `railWidth` offset and dim backdrop from `/documents` preview drawer so it anchors cleanly from the AI rail edge.
+Polish preview-first document UX: Done — rebalanced preview layout around full-height PDF, moved details/review into cleaner collapsible sections, and added a multi-signal confidence profile (extraction/evidence/context -> trust level).
+Fix header/rail layering + simplify preview to file-first layout: Done — app shell now clips below header with consistent max-width, header stays above rail on scroll, and preview drawer now prioritizes full-height file rendering with separate right info/actions column.
+UX validation for preview/chat stability: Done — added preview fetch cancellation, bottom-threshold auto-scroll behavior, and context reset on assistant errors.
+Add PDF highlight overlays with pdf.js: Done — added controlled PDF rendering with highlight overlays (search + field evidence) and iframe fallback when viewer load fails.
+Fix PDF highlight overlap bug: Done — added containment case to layout matching logic so highlights spanning multiple OCR segments are retained.
+Widen preview panel + dynamic height baseline: Done — replaced narrow/fixed-height preview layout with wider overlay and fluid full-height viewer region.
+Add approve/reject review controls to preview panel: Done — added UI actions for reviewable statuses with reject reason capture and status refresh after mutation.
+Add temporary collaboration boundary for parallel banking development: Done — added `/docs/ops/collaboration-boundary.md`, linked it in AGENTS, and marked removal after full-track integration.
+Fix AI rail vertical fill to bottom of viewport: Done — changed `AppShell` root to `h-dvh` with outer overflow hidden so rail/main region has a definite height and stretches correctly.
+Harden AI rail bottom anchoring across browsers: Done — rail now uses `grid-rows-[auto,minmax(0,1fr),auto]` for deterministic header/messages/input layout in Safari/Chrome/Firefox.
+Redesign AI rail structure to workspace-style sidebar: Done — added compact top controls (new chat/collapse), cleaner bubble/source hierarchy, and boxed bottom composer with utility row in consistent light theme styling.
+Remove shell footer from workspace layout: Done — removed `FooterBar` from `AppShell` so right rail spans fully from header to viewport bottom on workspace pages.
+
+- [x] Add business conversation intent to AI copilot — new `biz` intent routes broad business questions through metadata aggregation + Gemini for conversational answers.
+- [x] Evolve AI copilot from document search tool to conversational business AI — renamed `biz` to `chat` as default intent, added greeting/casual detection, conversation history in Gemini prompt, and fixed source card display for non-search intents.
+
+## Progress
+Add business conversation intent to AI copilot: Done — added `biz` intent with metadata aggregation, Gemini synthesis, and deterministic fallback; wired through router, rules, clarify, and frontend suggested prompts.
+Evolve AI copilot to conversational business AI: Done — renamed `biz` → `chat` as general-purpose default intent; added greeting/casual rule matching; conversation history passed to Gemini; fallback changed from `search` to `chat`; source cards suppressed for clarification/error/chat responses.
+
+- [x] Fix broken search routing + unblock document intelligence — fix follow-up clarification loop, add natural language search rules, vendor extraction, and async model fallback so search/RAG queries reach the right handlers.
+
+## Progress
+Fix broken search routing + unblock document intelligence: Done — exported CONFIDENCE_THRESHOLD/getConfidenceLevel from router; fixed handleFollowUp to recalculate needsClarification from boosted score; switched handleAssistantQuery to async routeQuery for Gemini model fallback; added search_natural rule with analytics guard; added vendor extraction (from/by/for + stopword guard) to parseQuery; enhanced classifyWithModel prompt; 81/81 tests pass.
+
+- [x] Fix source card filtering, sum vendor matching, markdown rendering, and follow-up context — use filtered search results for source cards, case-insensitive vendor extraction in sum-handler, install react-markdown for chat bubbles, and add elliptical follow-up intent carry-over.
+
+## Progress
+Fix source card filtering, sum vendor matching, markdown rendering, and follow-up context: Done — source cards now derive from filtered `executeSearch()` results (not unfiltered `hybridSearchDocuments`); sum-handler `extractVendorFromSemanticText` is case-insensitive with `about`/`related to` patterns; assistant messages render markdown via `react-markdown`+`remark-gfm`; Gemini prompt uses dash-bullets; elliptical queries ("the correct one?") carry over previous intent/slots; 104/104 tests pass.
 
 ## Next
-Run live UX validation on `/documents` with mixed-intent chat, then implement deterministic PDF highlight overlays (pdf.js) for browser-consistent in-file highlight rendering.
+TBD — evaluate next priority (cross-browser QA pass for preview drawer, assistant UX polish, or Drive live validation).

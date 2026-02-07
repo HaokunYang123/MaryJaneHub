@@ -19,7 +19,7 @@ import type {
   RECOMMENDED_SLOTS,
 } from "./types";
 
-const CONFIDENCE_THRESHOLD = 0.7;
+export const CONFIDENCE_THRESHOLD = 0.7;
 
 /**
  * Slot completeness scores
@@ -48,7 +48,7 @@ function parsedQueryToSlots(parsed: ParsedQuery): Slots {
 /**
  * Get confidence level from score
  */
-function getConfidenceLevel(score: number): ConfidenceLevel {
+export function getConfidenceLevel(score: number): ConfidenceLevel {
   if (score >= 0.85) return "high";
   if (score >= 0.7) return "medium";
   return "low";
@@ -104,6 +104,10 @@ function calculateSlotCompleteness(
         missingSlots.push("topic_or_entity");
       }
       break;
+
+    case "chat":
+      // chat: no required slots, always fully complete
+      break;
   }
 
   // Calculate score
@@ -149,6 +153,9 @@ function getClarifyingQuestion(intent: Intent, missingSlots: string[]): string |
         return "What would you like me to tell you about? Please specify a vendor, topic, or time period.";
       }
       break;
+
+    case "chat":
+      return undefined; // chat never needs clarification
   }
 
   return "Could you provide more details?";
@@ -166,10 +173,11 @@ async function classifyWithModel(
   const prompt = `You are an intent classifier for a document management assistant.
 
 Classify the following user query into ONE of these intents:
-- search: User wants to find or list documents (e.g., "find all FedEx invoices", "show me receipts from 2024")
+- search: Find, list, or locate specific documents (e.g., "find invoices from Centerpointe", "can you pull up the 2012 files?", "do we have any receipts from FedEx?")
 - single_qa: User is asking about a specific field of a document (e.g., "what's the total for invoice #123?")
 - sum: User wants numerical aggregation - totals, counts, averages (e.g., "how much did we spend in 2024?")
-- rag: User wants a synthesized answer across multiple documents (e.g., "tell me about our relationship with Bega")
+- rag: Synthesize or analyze information across documents (e.g., "what is the money flow from Centerpointe?", "tell me about our history with Bega", "how has spending with FedEx changed over time?")
+- chat: General conversation, greetings, or broad business questions not about specific documents (e.g., "hi", "how is my business doing?", "what can you do?", "who are our vendors?")
 
 Query: "${query}"
 
@@ -181,7 +189,7 @@ Extracted info:
 
   Respond with JSON only:
 {
-  "intent": "search" | "single_qa" | "sum" | "rag",
+  "intent": "search" | "single_qa" | "sum" | "rag" | "chat",
   "confidence": 0.0-1.0,
   "reasoning": "brief explanation"
 }`;
@@ -211,9 +219,9 @@ Extracted info:
 
   // Fallback if model fails
   return {
-    intent: "search",
+    intent: "chat",
     confidence: 0.5,
-    reasoning: "Model classification failed, defaulting to search",
+    reasoning: "Model classification failed, defaulting to chat",
   };
 }
 
@@ -329,9 +337,9 @@ export function routeQuerySync(query: string): RouterResult {
     }
   }
 
-  const intent = ruleMatch?.intent || "search";
-  const intentConfidence = ruleMatch?.confidence || 0.3;
-  const reasoning = ruleMatch?.reasoning || "No matching rules, defaulting to search";
+  const intent = ruleMatch?.intent || "chat";
+  const intentConfidence = ruleMatch?.confidence || 0.75;
+  const reasoning = ruleMatch?.reasoning || "No matching rules, defaulting to chat";
 
   if (ruleMatch?.additionalSlots) {
     Object.assign(slots, ruleMatch.additionalSlots);
