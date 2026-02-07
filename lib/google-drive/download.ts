@@ -25,6 +25,7 @@ export async function downloadFile(fileId: string): Promise<DownloadResult> {
         drive.files.get({
           fileId,
           fields: "mimeType",
+          supportsAllDrives: true,
         }),
       DRIVE_RETRY_OPTIONS
     );
@@ -37,6 +38,7 @@ export async function downloadFile(fileId: string): Promise<DownloadResult> {
           {
             fileId,
             alt: "media",
+            supportsAllDrives: true,
           },
           {
             responseType: "arraybuffer",

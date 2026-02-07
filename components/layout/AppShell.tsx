@@ -3,6 +3,8 @@ import type { AuthUser } from "@/lib/auth/session";
 import HeaderBar from "./HeaderBar";
 import SideNav from "./SideNav";
 import FooterBar from "./FooterBar";
+import AiRail from "./AiRail";
+import { AiRailProvider } from "./AiRailProvider";
 
 interface AppShellProps {
   user: AuthUser;
@@ -15,10 +17,13 @@ export default function AppShell({ user, children }: AppShellProps) {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <HeaderBar user={user} />
-      <div className="mx-auto flex w-full max-w-7xl">
-        <SideNav isAdmin={isAdmin} />
-        <main className="min-h-[calc(100vh-98px)] flex-1 px-4 py-6 sm:px-6">{children}</main>
-      </div>
+      <AiRailProvider>
+        <div className="mx-auto flex w-full max-w-[1660px]">
+          <SideNav isAdmin={isAdmin} />
+          <main className="min-h-[calc(100vh-98px)] flex-1 px-4 py-6 sm:px-6">{children}</main>
+          <AiRail />
+        </div>
+      </AiRailProvider>
       <FooterBar />
     </div>
   );

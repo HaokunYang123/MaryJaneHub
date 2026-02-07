@@ -6,6 +6,11 @@ export interface DriveFile {
   name: string;
   mimeType: string;
   createdTime: string;
+  modifiedTime?: string;
+  parents?: string[];
+  driveId?: string;
+  md5Checksum?: string;
+  appProperties?: Record<string, string>;
   size?: string;
 }
 

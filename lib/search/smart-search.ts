@@ -8,6 +8,7 @@
 import { getSupabase } from "../supabase/client";
 import { generateEmbedding } from "../gemini/embeddings";
 import { parseQuery, formatParsedQuery, type ParsedQuery } from "./parse-query";
+import { collapseDuplicateSearchResults } from "./deduplicate";
 
 export interface SmartSearchResult {
   id: string;
@@ -18,6 +19,8 @@ export interface SmartSearchResult {
   matchedFields: string[];
   extraction: Record<string, unknown>;
   createdAt: string;
+  duplicateCount?: number;
+  duplicateIds?: string[];
 }
 
 export interface SmartSearchResponse {
@@ -272,10 +275,11 @@ async function semanticSearch(
  */
 export async function smartSearch(
   query: string,
-  options: { limit?: number } = {}
+  options: { limit?: number; collapseDuplicates?: boolean } = {}
 ): Promise<SmartSearchResultType> {
   const startTime = Date.now();
   const limit = options.limit || 10;
+  const collapseDuplicates = options.collapseDuplicates ?? true;
 
   if (!query || query.trim().length === 0) {
     return {
@@ -316,9 +320,13 @@ export async function smartSearch(
     // Sort by score
     results.sort((a, b) => b.score - a.score);
 
+    const dedupedResults = collapseDuplicates
+      ? collapseDuplicateSearchResults(results)
+      : results.map((item) => ({ ...item, duplicateCount: 0, duplicateIds: [] }));
+
     return {
       success: true,
-      results: results.slice(0, limit),
+      results: dedupedResults.slice(0, limit),
       query,
       parsedQuery: parsed,
       processingTimeMs: Date.now() - startTime,

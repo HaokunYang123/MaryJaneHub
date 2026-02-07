@@ -78,3 +78,4 @@ Also log non-obvious learnings (e.g., "X library doesn't support Y") to avoid re
 - Whenever a critical user-side action is identified, add it to `/docs/ops/founder-todo.md` immediately in simple checkbox format.
 - Keep founder TODO entries concise and readable (short action lines only, no long explanations).
 - When an item is completed, mark it done by checking the same TODO item instead of rewriting history.
+- For Drive AI-management rollout, implement backend APIs/guards first; frontend is optional for controls and can be added after backend behavior is stable.

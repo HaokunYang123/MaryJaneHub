@@ -1,6 +1,7 @@
 import { getDriveClient } from "./client";
 import type { MoveResult } from "./types";
 import { retry } from "../utils/retry";
+import { getManagedRootIds } from "./managed-zone";
 
 const DRIVE_RETRY_OPTIONS = {
   retries: 2,
@@ -8,6 +9,88 @@ const DRIVE_RETRY_OPTIONS = {
   maxDelayMs: 2000,
   jitter: true,
 };
+
+async function getFolderParents(
+  folderId: string,
+  cache: Map<string, string[]>
+): Promise<string[]> {
+  const cached = cache.get(folderId);
+  if (cached) return cached;
+
+  const drive = getDriveClient();
+  const response = await retry(
+    () =>
+      drive.files.get({
+        fileId: folderId,
+        fields: "id, parents",
+        supportsAllDrives: true,
+      }),
+    DRIVE_RETRY_OPTIONS
+  );
+
+  const parents = response.data.parents || [];
+  cache.set(folderId, parents);
+  return parents;
+}
+
+async function isFolderInsideManagedRoots(
+  folderId: string,
+  managedRoots: Set<string>,
+  cache: Map<string, string[]>
+): Promise<boolean> {
+  if (!folderId) return false;
+  if (managedRoots.has(folderId)) return true;
+
+  const queue: string[] = [folderId];
+  const visited = new Set<string>();
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    if (managedRoots.has(current)) return true;
+
+    try {
+      const parents = await getFolderParents(current, cache);
+      for (const parentId of parents) {
+        if (!visited.has(parentId)) queue.push(parentId);
+      }
+    } catch {
+      // If parent lookup fails, treat as outside managed roots.
+      return false;
+    }
+  }
+
+  return false;
+}
+
+async function validateManagedMoveBoundaries(
+  sourceFolderId: string,
+  targetFolderId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const roots = getManagedRootIds();
+  if (roots.length === 0) {
+    return { ok: true };
+  }
+
+  const managedRoots = new Set(roots);
+  const cache = new Map<string, string[]>();
+  const [sourceAllowed, targetAllowed] = await Promise.all([
+    isFolderInsideManagedRoots(sourceFolderId, managedRoots, cache),
+    isFolderInsideManagedRoots(targetFolderId, managedRoots, cache),
+  ]);
+
+  if (!sourceAllowed || !targetAllowed) {
+    return {
+      ok: false,
+      error:
+        "Write denied: move/rename is allowed only within configured AI-managed root folders",
+    };
+  }
+
+  return { ok: true };
+}
 
 /**
  * Move and rename a file in Google Drive
@@ -33,6 +116,7 @@ export async function moveAndRenameFile(
           fileId,
           addParents: targetFolderId,
           removeParents: sourceFolderId,
+          supportsAllDrives: true,
           requestBody: {
             name: newName,
           },
@@ -72,6 +156,29 @@ export async function moveAndRenameFile(
 }
 
 /**
+ * Move/rename with AI-managed zone guard.
+ *
+ * If GOOGLE_DRIVE_AI_MANAGED_ROOT_IDS is configured, both source and target
+ * folders must resolve under those roots.
+ */
+export async function moveAndRenameFileWithinManagedRoots(
+  fileId: string,
+  newName: string,
+  targetFolderId: string,
+  sourceFolderId: string
+): Promise<MoveResult> {
+  const validation = await validateManagedMoveBoundaries(sourceFolderId, targetFolderId);
+  if (!validation.ok) {
+    return {
+      success: false,
+      error: validation.error,
+    };
+  }
+
+  return moveAndRenameFile(fileId, newName, targetFolderId, sourceFolderId);
+}
+
+/**
  * Rename a file without moving it
  */
 export async function renameFile(
@@ -85,6 +192,7 @@ export async function renameFile(
       () =>
         drive.files.update({
           fileId,
+          supportsAllDrives: true,
           requestBody: {
             name: newName,
           },

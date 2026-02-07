@@ -25,6 +25,7 @@
     "embeddings:backfill": "npx tsx scripts/backfill-embeddings.ts",
     "evidence:backfill": "node --import tsx scripts/backfill-field-evidence.ts",
     "test:search": "npx tsx scripts/test-semantic-search.ts",
+    "test:search:dedupe": "npx tsx scripts/test-search-deduplicate.ts",
     "test:search:compare": "npx tsx scripts/compare-search-modes.ts",
     "test:embedding:cache": "npx tsx scripts/test-embedding-cache.ts",
     "benchmark": "npx tsx scripts/benchmark-all.ts",

@@ -4,6 +4,7 @@ import type { DocumentType } from "@/lib/gemini/document-types";
 import { verifyAuth } from "@/lib/auth/api-middleware";
 import { buildSearchHighlight, type SearchHighlight } from "@/lib/search/highlight";
 import { getDocumentLayout } from "@/lib/supabase/document-layouts";
+import { collapseDuplicateSearchResults } from "@/lib/search/deduplicate";
 
 /**
  * GET /api/documents/search
@@ -90,8 +91,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const includeHighlightParam = searchParams.get("includeHighlight");
   const includeLocationParam = searchParams.get("includeLocation");
+  const collapseDuplicatesParam = searchParams.get("collapseDuplicates");
   const includeLocation = includeLocationParam === "true";
   const includeHighlight = includeLocation || includeHighlightParam === "true";
+  const collapseDuplicates = collapseDuplicatesParam !== "false";
 
   async function enrichResults<T extends { id: string; rawText: string | null }>(
     results: T[]
@@ -171,7 +174,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         );
       }
 
-      const results = await enrichResults(result.results);
+      const enriched = await enrichResults(result.results);
+      const results = collapseDuplicates ? collapseDuplicateSearchResults(enriched) : enriched;
 
       return NextResponse.json({
         success: true,
@@ -180,6 +184,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           results,
           query: result.query,
           options: result.options,
+          collapseDuplicates,
           processingTimeMs: result.processingTimeMs,
         },
       });
@@ -211,7 +216,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         );
       }
 
-      const results = await enrichResults(result.results);
+      const enriched = await enrichResults(result.results);
+      const results = collapseDuplicates ? collapseDuplicateSearchResults(enriched) : enriched;
 
       return NextResponse.json({
         success: true,
@@ -220,6 +226,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           results,
           query: result.query,
           options: result.options,
+          collapseDuplicates,
           processingTimeMs: result.processingTimeMs,
         },
       });

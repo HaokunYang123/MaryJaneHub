@@ -1,24 +1,20 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import AppShell from "@/components/layout/AppShell";
+import DocumentsWorkspace from "@/components/documents/DocumentsWorkspace";
+import { getSession } from "@/lib/auth/session";
 
-export default function DocumentsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function DocumentsPage() {
+  const { user } = await getSession();
+
+  if (!user) {
+    redirect("/login");
+  }
+
   return (
-    <main className="p-8">
-      <h1 className="text-2xl font-semibold">Documents</h1>
-      <p className="mt-2 text-gray-600">
-        This is a minimal landing page to avoid dead links. Use the API routes
-        or admin tools to review and approve documents.
-      </p>
-      <div className="mt-6 flex flex-col gap-3">
-        <Link className="text-blue-600 underline" href="/api/documents">
-          View documents API
-        </Link>
-        <Link className="text-blue-600 underline" href="/api/export">
-          Export data
-        </Link>
-        <Link className="text-blue-600 underline" href="/dashboard">
-          Back to dashboard
-        </Link>
-      </div>
-    </main>
+    <AppShell user={user}>
+      <DocumentsWorkspace />
+    </AppShell>
   );
 }

@@ -1,5 +1,29 @@
 # Technical Decisions
 
+## 2026-02-07: Route global AI rail through a unified assistant API
+Context: The right-side AI rail is now persistent across pages and needed one backend contract for both business Q&A and file-search source linking. | Decision: Add `/api/assistant/chat` with auth, route via assistant intent handling, and return source cards only when intent/output contains evidence (search/rag/single-doc). | Reason: Keeps one always-on chat UX while preserving source-to-preview linkage without duplicating page-specific chat logic.
+
+## 2026-02-07: Use auth-gated signed preview URLs for source-linked document panel
+Context: Documents UI needed exact-file preview from chat source clicks without exposing archive bucket objects publicly. | Decision: Add `/api/documents/[id]/preview` to return short-lived signed GCS URLs (with Drive preview fallback), and bind semantic-search source cards to this preview panel with query/page/quote context. | Reason: Enables secure real-file preview UX while keeping backend source-of-truth and highlight context aligned.
+
+## 2026-02-07: Use folder-scoped Drive access for pilot
+Context: Full-drive access is not available now, but Mary can share a test parent folder that includes Inbox/Processed. | Decision: Run pilot integration with folder-scoped access on the Mary test parent folder and defer full-drive indexing rollout. | Reason: Improves security posture and allows progress without broad Drive permissions.
+
+## 2026-02-07: Ship documents workspace as API-first frontend slice
+Context: `/documents` still showed a placeholder page while users needed a real working document experience aligned with dashboard style. | Decision: Replace `/documents` with `AppShell` + a client workspace that keeps legacy backend dropped, uses only current endpoints (`/api/documents`, `/api/documents/[id]`, `/api/documents/search`), and provides collapsible AI/search + right preview panels. | Reason: Delivers immediate usable frontend value without introducing deprecated endpoint coupling.
+
+## 2026-02-07: Prioritize frontend work before live Drive validation
+Context: Regular Google Drive environment for end-to-end admin API validation is not ready yet, while frontend work is unblocked. | Decision: Move frontend implementation ahead now and defer live Drive validation tasks until Drive environment provisioning is complete. | Reason: Maintains delivery momentum without blocking on external environment readiness.
+
+## 2026-02-07: Add local regression test for duplicate-collapse search behavior
+Context: Live Drive validation is pending environment setup, but duplicate-collapse logic needs fast confidence now. | Decision: Add an offline test script (`npm run test:search:dedupe`) covering canonical selection and duplicate metadata output. | Reason: Protects core retrieval behavior without requiring external service availability.
+
+## 2026-02-07: Collapse semantic search duplicates to canonical results
+Context: Users can keep duplicates in user-managed Drive areas, but search/chat should avoid noisy repeated hits. | Decision: Add backend duplicate-collapse logic with canonical tie-breakers (relevance, extraction confidence, recency) and return duplicate metadata (`duplicateCount`, `duplicateIds`) for UI/chat. | Reason: Preserves user flexibility while keeping retrieval output clean and professional.
+
+## 2026-02-07: Implement Drive management as backend-first foundation without frontend dependency
+Context: Need to start all-drive indexing and managed-zone organization quickly while product UX is still evolving. | Decision: Add admin backend APIs for corpus listing, private metadata writes, and managed-zone move/rename guard; keep frontend optional for later controls. | Reason: Delivers secure core behavior now and avoids blocking on UI decisions.
+
 ## 2026-02-06: Scope Next.js type-check to app/lib during frontend merge
 Context: Frontend verification was blocked by script-only TypeScript errors unrelated to the current UI merge slice. | Decision: Remove `scripts/**/*` from `tsconfig.json` `include` so Next.js build validation focuses on app/lib paths. | Reason: Keeps frontend merge iteration fast and avoids unrelated script churn during UI integration.
 

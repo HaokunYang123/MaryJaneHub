@@ -45,10 +45,13 @@ export async function listNewFiles(
       () =>
         drive.files.list({
           q: query,
-          fields: "nextPageToken, files(id, name, mimeType, createdTime, size)",
+          fields:
+            "nextPageToken, files(id, name, mimeType, createdTime, modifiedTime, size, parents, driveId, md5Checksum, appProperties)",
           orderBy: "createdTime asc", // Oldest first for FIFO processing
           pageSize: 100, // Max per page
           pageToken,
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true,
         }),
       DRIVE_RETRY_OPTIONS
     );
@@ -61,6 +64,11 @@ export async function listNewFiles(
         name: file.name || "",
         mimeType: file.mimeType || "",
         createdTime: file.createdTime || "",
+        modifiedTime: file.modifiedTime || undefined,
+        parents: file.parents || undefined,
+        driveId: file.driveId || undefined,
+        md5Checksum: file.md5Checksum || undefined,
+        appProperties: (file.appProperties as Record<string, string> | undefined) || undefined,
         size: file.size || undefined,
       });
 
@@ -88,7 +96,9 @@ export async function getFileMetadata(fileId: string): Promise<DriveFile | null>
       () =>
         drive.files.get({
           fileId,
-          fields: "id, name, mimeType, createdTime, size",
+          fields:
+            "id, name, mimeType, createdTime, modifiedTime, size, parents, driveId, md5Checksum, appProperties",
+          supportsAllDrives: true,
         }),
       DRIVE_RETRY_OPTIONS
     );
@@ -99,6 +109,11 @@ export async function getFileMetadata(fileId: string): Promise<DriveFile | null>
       name: file.name || "",
       mimeType: file.mimeType || "",
       createdTime: file.createdTime || "",
+      modifiedTime: file.modifiedTime || undefined,
+      parents: file.parents || undefined,
+      driveId: file.driveId || undefined,
+      md5Checksum: file.md5Checksum || undefined,
+      appProperties: (file.appProperties as Record<string, string> | undefined) || undefined,
       size: file.size || undefined,
     };
   } catch (error) {

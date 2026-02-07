@@ -1,7 +1,7 @@
 # Drive Management Strategy (Living Note)
 
 ## Status
-Draft v0.2 (actively updated during product discussion).
+Draft v0.3 (actively updated during product discussion).
 
 ## Linked Owner Checklist
 - Product-owner execution checklist: `/docs/ops/founder-todo.md`
@@ -25,12 +25,31 @@ Design a Google Drive strategy that keeps all content searchable/chat-ready whil
 - Global metadata policy:
   - AI can write private metadata for both AI-managed and user-managed files to support indexing/search/interaction.
   - Outside AI-managed roots, metadata writes must not alter user-visible organization.
+- Access scope for current pilot:
+  - Integration access is limited to Mary test parent folder (including Inbox/Processed subfolders).
+  - Full-drive access (all My Drive + Shared Drives) is deferred to a later rollout phase.
 
 ## Product Intent (Current Interpretation)
 - Users can upload via:
   - Directly into Google Drive (any folder).
   - Website upload flow connected to the AI-managed intake area.
 - AI should provide intelligent structure inside entity roots and keep outputs suitable for customer-facing sharing.
+
+## Implementation Status (2026-02-07)
+- Implemented backend-first foundation (no frontend dependency):
+  - Corpus listing across My Drive + Shared Drives (`/api/admin/drive/corpus`).
+  - Private metadata read/write API for Drive `appProperties` (`/api/admin/drive/metadata`).
+  - Managed-zone organization API with write guard (`/api/admin/drive/organize`).
+  - Duplicate-collapse in search output (`/api/documents/search`, `smartSearch`) with canonical result metadata.
+  - Shared-drive-safe Drive API calls (`supportsAllDrives`, `includeItemsFromAllDrives` where applicable).
+- Current write-guard behavior:
+  - If `GOOGLE_DRIVE_AI_MANAGED_ROOT_IDS` is configured, managed organize actions are allowed only within those roots/subtrees.
+  - If roots are not configured, guard falls back to permissive mode (for backward compatibility during rollout).
+- Frontend requirement:
+  - Not required for initial implementation.
+  - Frontend is optional for visibility/controls (settings, approvals, review UX).
+- Current blocker:
+  - Live admin API validation is pending until a regular Google Drive environment is provisioned.
 
 ## Recommended Baseline Architecture (v0.2)
 1. Corpus indexing:
@@ -137,3 +156,5 @@ Design a Google Drive strategy that keeps all content searchable/chat-ready whil
 - Define production environment split:
   - Development/testing may use Gemini Developer API with non-sensitive data only.
   - Production should use Vertex AI project controls and retention settings.
+- Add change-log incremental sync (user + each shared drive) to replace full-crawl-only indexing.
+- Add duplicate-collapse layer in search response shape (canonical + duplicate_count + expansion hooks).
