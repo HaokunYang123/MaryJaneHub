@@ -56,4 +56,4 @@ Google Drive Inbox
 - [ ] Phase 4: TBD — Frontend polish / Bank connectors / Production hardening
 - [x] Phase 5: Evidence Coordinates (Document AI)
 - [x] Phase 6: Storage Hardening (Archive + Working)
-- [ ] Phase 7: Batch OCR + Backfill Performance
+- [x] Phase 7: Batch OCR + Backfill Performance
