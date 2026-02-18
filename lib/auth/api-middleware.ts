@@ -163,7 +163,19 @@ export async function requireAdmin(request: NextRequest): Promise<AuthResult> {
   const expectedSecret = resolveAdminSecret();
   const providedSecret = request.headers.get(ADMIN_SECRET_HEADER)?.trim() || null;
 
-  if (expectedSecret && providedSecret) {
+  if (expectedSecret !== null) {
+    // ADMIN_SECRET is configured — enforce secret-only auth, no role fallback.
+    // This prevents OAuth admin users from bypassing the secret requirement.
+    if (providedSecret === null) {
+      return {
+        authenticated: false,
+        response: NextResponse.json(
+          { error: "Unauthorized", message: "Admin secret required" },
+          { status: 401 }
+        ),
+      };
+    }
+
     if (safeEqualSecret(providedSecret, expectedSecret)) {
       return {
         authenticated: true,
@@ -184,6 +196,7 @@ export async function requireAdmin(request: NextRequest): Promise<AuthResult> {
     };
   }
 
+  // ADMIN_SECRET not configured — fall back to OAuth role-based auth.
   return requireRole(request, "admin");
 }
 
