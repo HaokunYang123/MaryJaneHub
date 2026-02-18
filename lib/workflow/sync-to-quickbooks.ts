@@ -9,9 +9,9 @@ import {
 import { convertInvoiceToBill, canConvertToBill } from "../quickbooks/invoice-to-bill";
 import {
   buildQbIdempotencyKey,
-  getQbIdempotencyRecord,
-  insertQbIdempotencyRecord,
-  type QbIdempotencyRecord,
+  tryClaimIdempotencySlot,
+  fulfillIdempotencySlot,
+  abandonIdempotencySlot,
 } from "../quickbooks/idempotency";
 import type { InvoiceExtraction } from "../gemini/types";
 import type { SyncStatus } from "./review-flags";
@@ -253,6 +253,11 @@ export async function syncDocumentWithDeps(
 ): Promise<SyncResult> {
   const supabase = deps.supabase;
 
+  // Track the claimed idempotency slot so we can abandon it in finally if
+  // the QB API call fails or an early validation error occurs.
+  let claimedIdempotencyKey: string | null = null;
+  let slotFulfilled = false;
+
   try {
     // Get document
     const { data: doc, error: fetchError } = await supabase
@@ -313,62 +318,82 @@ export async function syncDocumentWithDeps(
       date: invoiceDate,
     });
 
-    const existingRecord = await getQbIdempotencyRecord(supabase, idempotencyKey).catch(() => null);
-    if (existingRecord?.qb_object_id) {
-      const existingBill = await deps.getBill(existingRecord.qb_object_id).catch((error) => {
-        throw new Error(`Unable to fetch existing QuickBooks bill for reconciliation: ${String(error)}`);
-      });
-      const existingRecon = reconcileBillAgainstSnapshot({
-        bill: existingBill,
-        expectedVendorId: doc.qb_vendor_id || existingBill.VendorRef?.value || "",
-        snapshot: invoiceData,
-      });
-      if (!existingRecon.ok) {
-        const errorMessage = `Post-sync reconciliation failed for existing bill ${existingRecord.qb_object_id}: ${existingRecon.mismatches.join("; ")}`;
-        await recordReconciliationFailure({
+    // Atomically claim the idempotency slot before calling the QB API.
+    // Only the first concurrent request to reach this point will succeed;
+    // the others get the existing record and return early (deduped or in-progress).
+    const { claimed, existingRecord } = await tryClaimIdempotencySlot(
+      supabase, idempotencyKey, documentId, "bill"
+    );
+
+    if (!claimed) {
+      if (existingRecord?.status === "complete" && existingRecord.qb_object_id) {
+        // A previous (or concurrent) sync already completed — reconcile & return deduped.
+        const existingBill = await deps.getBill(existingRecord.qb_object_id).catch((error) => {
+          throw new Error(`Unable to fetch existing QuickBooks bill for reconciliation: ${String(error)}`);
+        });
+        const existingRecon = reconcileBillAgainstSnapshot({
+          bill: existingBill,
+          expectedVendorId: doc.qb_vendor_id || existingBill.VendorRef?.value || "",
+          snapshot: invoiceData,
+        });
+        if (!existingRecon.ok) {
+          const errorMessage = `Post-sync reconciliation failed for existing bill ${existingRecord.qb_object_id}: ${existingRecon.mismatches.join("; ")}`;
+          await recordReconciliationFailure({
+            supabase,
+            documentId,
+            billId: existingRecord.qb_object_id,
+            vendorId: existingBill.VendorRef?.value || null,
+            error: errorMessage,
+            mismatches: existingRecon.mismatches,
+          });
+          return {
+            success: false,
+            documentId,
+            newStatus: "error",
+            error: errorMessage,
+          };
+        }
+
+        await updateDocumentSyncInfo({
           supabase,
           documentId,
           billId: existingRecord.qb_object_id,
-          vendorId: existingBill.VendorRef?.value || null,
-          error: errorMessage,
-          mismatches: existingRecon.mismatches,
+          vendorId: existingBill.VendorRef?.value || doc.qb_vendor_id || null,
+          syncStatus: "synced",
         });
-        return {
-          success: false,
+
+        await recordSyncAudit({
+          supabase,
           documentId,
-          newStatus: "error",
-          error: errorMessage,
+          billId: existingRecord.qb_object_id,
+          vendorId: existingBill.VendorRef?.value || doc.qb_vendor_id || null,
+          total: invoiceData.total ?? null,
+          idempotencyKey,
+          syncAction: "deduped",
+        });
+
+        return {
+          success: true,
+          documentId,
+          qbBillId: existingRecord.qb_object_id,
+          qbVendorId: existingBill.VendorRef?.value || doc.qb_vendor_id || undefined,
+          newStatus: "synced",
+          deduped: true,
+          syncAction: "deduped",
         };
       }
 
-      await updateDocumentSyncInfo({
-        supabase,
-        documentId,
-        billId: existingRecord.qb_object_id,
-        vendorId: existingBill.VendorRef?.value || doc.qb_vendor_id || null,
-        syncStatus: "synced",
-      });
-
-      await recordSyncAudit({
-        supabase,
-        documentId,
-        billId: existingRecord.qb_object_id,
-        vendorId: existingBill.VendorRef?.value || doc.qb_vendor_id || null,
-        total: invoiceData.total ?? null,
-        idempotencyKey,
-        syncAction: "deduped",
-      });
-
+      // Slot is pending — another request currently holds it (QB API in flight).
       return {
-        success: true,
+        success: false,
         documentId,
-        qbBillId: existingRecord.qb_object_id,
-        qbVendorId: existingBill.VendorRef?.value || doc.qb_vendor_id || undefined,
-        newStatus: "synced",
-        deduped: true,
-        syncAction: "deduped",
+        newStatus: "error",
+        error: "Sync already in progress for this document — retry after the current sync completes",
       };
     }
+
+    // We claimed the slot; track it so finally can abandon on failure.
+    claimedIdempotencyKey = idempotencyKey;
 
     const checklist = evaluatePreSyncChecklist({
       syncStatus: doc.sync_status,
@@ -468,14 +493,10 @@ export async function syncDocumentWithDeps(
       }
 
       try {
-        await insertQbIdempotencyRecord(supabase, {
-          document_id: documentId,
-          qb_object_type: "bill",
-          qb_object_id: duplicateBill.Id,
-          idempotency_key: idempotencyKey,
-        });
+        await fulfillIdempotencySlot(supabase, idempotencyKey, duplicateBill.Id);
+        slotFulfilled = true;
       } catch (error) {
-        console.warn(`[QB] Failed to store preflight dedupe idempotency record: ${String(error)}`);
+        console.warn(`[QB] Failed to fulfill idempotency slot for preflight dedupe: ${String(error)}`);
       }
 
       await updateDocumentSyncInfo({
@@ -525,15 +546,13 @@ export async function syncDocumentWithDeps(
     try {
       createdBill = await deps.getBill(bill.Id);
     } catch (error) {
+      // Bill was created but we couldn't fetch it for reconciliation.
+      // Fulfill the slot so the bill is tracked and not orphaned.
       try {
-        await insertQbIdempotencyRecord(supabase, {
-          document_id: documentId,
-          qb_object_type: "bill",
-          qb_object_id: bill.Id,
-          idempotency_key: idempotencyKey,
-        });
+        await fulfillIdempotencySlot(supabase, idempotencyKey, bill.Id);
+        slotFulfilled = true;
       } catch (recordError) {
-        console.warn(`[QB] Failed to record idempotency after reconciliation fetch failure: ${String(recordError)}`);
+        console.warn(`[QB] Failed to fulfill idempotency slot after getBill failure: ${String(recordError)}`);
       }
 
       const errorMessage = `Failed to fetch created bill ${bill.Id} for reconciliation: ${String(error)}`;
@@ -559,15 +578,13 @@ export async function syncDocumentWithDeps(
       snapshot: invoiceData,
     });
     if (!createdRecon.ok) {
+      // Fulfill the slot even on reconciliation mismatch — the bill exists in QB
+      // and must be tracked to prevent a future sync from creating another duplicate.
       try {
-        await insertQbIdempotencyRecord(supabase, {
-          document_id: documentId,
-          qb_object_type: "bill",
-          qb_object_id: bill.Id,
-          idempotency_key: idempotencyKey,
-        });
+        await fulfillIdempotencySlot(supabase, idempotencyKey, bill.Id);
+        slotFulfilled = true;
       } catch (recordError) {
-        console.warn(`[QB] Failed to record idempotency after reconciliation mismatch: ${String(recordError)}`);
+        console.warn(`[QB] Failed to fulfill idempotency slot after reconciliation mismatch: ${String(recordError)}`);
       }
 
       const errorMessage = `Post-sync reconciliation failed for created bill ${bill.Id}: ${createdRecon.mismatches.join("; ")}`;
@@ -587,28 +604,14 @@ export async function syncDocumentWithDeps(
       };
     }
 
-    let record: QbIdempotencyRecord = {
-      document_id: documentId,
-      qb_object_type: "bill",
-      qb_object_id: createdBill.Id || bill.Id,
-      idempotency_key: idempotencyKey,
-    };
-    let deduped = false;
+    const billIdToUse = createdBill.Id || bill.Id;
 
     try {
-      const insertResult = await insertQbIdempotencyRecord(supabase, record);
-      deduped = insertResult.deduped;
-      if (deduped) {
-        const existing = await getQbIdempotencyRecord(supabase, idempotencyKey).catch(() => null);
-        if (existing?.qb_object_id) {
-          record = existing;
-        }
-      }
+      await fulfillIdempotencySlot(supabase, idempotencyKey, billIdToUse);
+      slotFulfilled = true;
     } catch (error) {
-      console.warn(`[QB] Failed to store idempotency record: ${String(error)}`);
+      console.warn(`[QB] Failed to fulfill idempotency slot: ${String(error)}`);
     }
-
-    const billIdToUse = record.qb_object_id;
 
     await updateDocumentSyncInfo({
       supabase,
@@ -625,7 +628,7 @@ export async function syncDocumentWithDeps(
       vendorId: vendorId || null,
       total: createdBill.TotalAmt ?? bill.TotalAmt ?? invoiceData.total ?? null,
       idempotencyKey,
-      syncAction: deduped ? "deduped" : "created",
+      syncAction: "created",
     });
 
     return {
@@ -634,8 +637,8 @@ export async function syncDocumentWithDeps(
       qbBillId: billIdToUse,
       qbVendorId: vendorId,
       newStatus: "synced",
-      deduped,
-      syncAction: deduped ? "deduped" : "created",
+      deduped: false,
+      syncAction: "created",
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -649,6 +652,12 @@ export async function syncDocumentWithDeps(
       newStatus: "error",
       error: errorMessage,
     };
+  } finally {
+    // If we claimed the slot but never fulfilled it (validation failure, QB API error,
+    // or unhandled exception), abandon it so a future retry can claim and try again.
+    if (claimedIdempotencyKey && !slotFulfilled) {
+      await abandonIdempotencySlot(supabase, claimedIdempotencyKey).catch(() => {});
+    }
   }
 }
 
