@@ -351,6 +351,54 @@ async function resetAllData(options: ResetOptions): Promise<void> {
 const args = process.argv.slice(2);
 const confirm = args.includes("--confirm");
 
+// Environment safety gate — requires explicit --env=local or --env=staging flag.
+// Prevents accidental execution against production data.
+const envFlag = args.find((a) => a.startsWith("--env="))?.split("=")[1];
+
+if (!envFlag) {
+  console.error(
+    "ERROR: --env flag required. Use --env=local or --env=staging.\n" +
+    "  npm run reset:execute -- --env=local\n" +
+    "  npm run reset:execute -- --env=staging"
+  );
+  process.exit(1);
+}
+
+if (envFlag !== "local" && envFlag !== "staging") {
+  console.error(`ERROR: Invalid --env value "${envFlag}". Must be "local" or "staging".`);
+  process.exit(1);
+}
+
+const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "").trim();
+
+if (envFlag === "local") {
+  const isLocal =
+    supabaseUrl.startsWith("http://localhost") ||
+    supabaseUrl.startsWith("http://127.0.0.1");
+  if (!isLocal) {
+    console.error(
+      `ERROR: --env=local specified but SUPABASE_URL does not look local.\n` +
+      `  SUPABASE_URL: ${supabaseUrl || "(not set)"}\n` +
+      `  Expected a localhost URL. Refusing to run.`
+    );
+    process.exit(1);
+  }
+}
+
+if (envFlag === "staging") {
+  const isProduction = supabaseUrl.includes("supabase.co") && !supabaseUrl.includes("-staging");
+  if (isProduction) {
+    console.error(
+      `ERROR: --env=staging specified but SUPABASE_URL appears to be a production URL.\n` +
+      `  SUPABASE_URL: ${supabaseUrl}\n` +
+      `  Refusing to run against production. Verify you have the staging .env loaded.`
+    );
+    process.exit(1);
+  }
+}
+
+console.log(`[reset] Environment: ${envFlag} | Supabase: ${supabaseUrl}`);
+
 // Run
 resetAllData({ confirm }).catch((error) => {
   console.error("Fatal error:", error);
