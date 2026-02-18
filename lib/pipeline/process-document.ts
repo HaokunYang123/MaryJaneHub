@@ -6,7 +6,7 @@ import { validateClassification } from "../gemini/validate-classification";
 import { extractDocument, type DocumentExtraction } from "../gemini/extract-document";
 import { extractKeyFields } from "../gemini/extract-key-fields";
 import { uploadToGCS } from "../gcs/upload";
-import { saveDocument, getDocumentByHash } from "../supabase/documents";
+import { saveDocument, getDocumentByHash, updateDocumentGcsInfo } from "../supabase/documents";
 import { analyzeDocument, type SyncStatus, type ReviewFlag } from "../workflow/review-flags";
 import { ensureFieldEvidence } from "../workflow/field-evidence";
 import type { FieldEvidenceMap } from "../gemini/field-evidence";
@@ -452,37 +452,10 @@ export async function processDocument(
 
   // Step 5: Upload to GCS for archival (non-blocking on failure)
   let gcsPath: string | undefined;
-  let gcsBucket: string | undefined;
-  let gcsObject: string | undefined;
-  let gcsGeneration: string | undefined;
-  let gcsHashType: "md5" | "crc32c" | undefined;
-  let gcsHashValue: string | undefined;
-  let gcsRetentionStatus: "confirmed" | "unconfirmed" | undefined;
-  try {
-    const uploadStart = performance.now();
-    const gcsResult = await uploadToGCS(fileBuffer, fileName, fileHash, mimeType);
-    timings.uploadMs = performance.now() - uploadStart;
-    if (gcsResult.success) {
-      gcsPath = gcsResult.gcsPath;
-      gcsBucket = gcsResult.gcsBucket;
-      gcsObject = gcsResult.gcsObject;
-      gcsGeneration = gcsResult.gcsGeneration;
-      gcsHashType = gcsResult.gcsHashType;
-      gcsHashValue = gcsResult.gcsHashValue;
-      gcsRetentionStatus = gcsResult.retentionStatus;
-      if (gcsResult.retentionStatus === "unconfirmed") {
-        processingErrors.push("GCS retention policy not confirmed for archive object");
-        partialFailure = true;
-      }
-    } else {
-      console.warn(`GCS upload warning: ${gcsResult.error}`);
-    }
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : "Unknown GCS error";
-    console.warn(`GCS upload warning: ${errorMessage}`);
-  }
-
-  // Step 6: Save to Supabase - ALWAYS save, even on partial failure
+  // Step 5: Save to Supabase FIRST (without GCS path) to prevent orphaned GCS objects.
+  // If DB write fails, we skip the GCS upload entirely — no orphan possible.
+  // If DB write succeeds but GCS upload later fails, the document record exists
+  // without a GCS path (recoverable via re-upload) rather than a stranded GCS file.
   let documentId: string | undefined;
   try {
     const saveStart = performance.now();
@@ -490,13 +463,13 @@ export async function processDocument(
       fileName,
       fileHash,
       mimeType,
-      gcsPath,
-      gcsBucket,
-      gcsObject,
-      gcsGeneration,
-      gcsHashType,
-      gcsHashValue,
-      gcsRetentionStatus,
+      gcsPath: undefined,
+      gcsBucket: undefined,
+      gcsObject: undefined,
+      gcsGeneration: undefined,
+      gcsHashType: undefined,
+      gcsHashValue: undefined,
+      gcsRetentionStatus: undefined,
       ocrConfidence,
       rawText,
       extraction,
@@ -518,6 +491,53 @@ export async function processDocument(
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown Supabase error";
     console.warn(`Supabase save warning: ${errorMessage}`);
+  }
+
+  // Step 6: Upload to GCS — only attempted after DB record is committed.
+  // On success, patch the document record with storage coordinates.
+  let gcsBucket: string | undefined;
+  let gcsObject: string | undefined;
+  let gcsGeneration: string | undefined;
+  let gcsHashType: "md5" | "crc32c" | undefined;
+  let gcsHashValue: string | undefined;
+  let gcsRetentionStatus: "confirmed" | "unconfirmed" | undefined;
+  if (documentId) {
+    try {
+      const uploadStart = performance.now();
+      const gcsResult = await uploadToGCS(fileBuffer, fileName, fileHash, mimeType);
+      timings.uploadMs = performance.now() - uploadStart;
+      if (gcsResult.success) {
+        gcsPath = gcsResult.gcsPath;
+        gcsBucket = gcsResult.gcsBucket;
+        gcsObject = gcsResult.gcsObject;
+        gcsGeneration = gcsResult.gcsGeneration;
+        gcsHashType = gcsResult.gcsHashType;
+        gcsHashValue = gcsResult.gcsHashValue;
+        gcsRetentionStatus = gcsResult.retentionStatus;
+        if (gcsResult.retentionStatus === "unconfirmed") {
+          processingErrors.push("GCS retention policy not confirmed for archive object");
+          partialFailure = true;
+        }
+        // Patch DB record with storage coordinates
+        const gcsUpdateResult = await updateDocumentGcsInfo(documentId, {
+          gcsPath: gcsResult.gcsPath,
+          gcsBucket: gcsResult.gcsBucket,
+          gcsObject: gcsResult.gcsObject,
+          gcsGeneration: gcsResult.gcsGeneration,
+          gcsHashType: gcsResult.gcsHashType,
+          gcsHashValue: gcsResult.gcsHashValue,
+          gcsRetentionStatus: gcsResult.retentionStatus,
+        });
+        if (!gcsUpdateResult.success) {
+          console.warn(`GCS info update warning: ${gcsUpdateResult.error}`);
+        }
+      } else {
+        console.warn(`GCS upload warning: ${gcsResult.error}`);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown GCS error";
+      console.warn(`GCS upload warning: ${errorMessage}`);
+    }
   }
 
   // Step 6b: Persist OCR layout (non-blocking on failure)

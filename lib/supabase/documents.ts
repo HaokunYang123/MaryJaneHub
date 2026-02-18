@@ -179,6 +179,47 @@ export async function saveDocument(
 }
 
 /**
+ * Update a document's GCS storage fields after a successful upload.
+ *
+ * Called as part of the DB-first upload pattern: saveDocument() records the
+ * document without GCS info, then uploadToGCS() runs, then this function
+ * fills in the storage coordinates so no orphaned GCS objects can occur.
+ */
+export async function updateDocumentGcsInfo(
+  documentId: string,
+  gcsInfo: {
+    gcsPath: string;
+    gcsBucket: string;
+    gcsObject: string;
+    gcsGeneration?: string;
+    gcsHashType?: "md5" | "crc32c";
+    gcsHashValue?: string;
+    gcsRetentionStatus?: "confirmed" | "unconfirmed";
+  }
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = getSupabase();
+
+  const { error } = await supabase
+    .from("documents")
+    .update({
+      gcs_path: gcsInfo.gcsPath,
+      gcs_bucket: gcsInfo.gcsBucket,
+      gcs_object: gcsInfo.gcsObject,
+      gcs_generation: gcsInfo.gcsGeneration || null,
+      gcs_hash_type: gcsInfo.gcsHashType || null,
+      gcs_hash_value: gcsInfo.gcsHashValue || null,
+      gcs_retention_status: gcsInfo.gcsRetentionStatus || null,
+    })
+    .eq("id", documentId);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+}
+
+/**
  * Get a document by its file hash
  */
 export async function getDocumentByHash(
