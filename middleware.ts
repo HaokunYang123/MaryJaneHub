@@ -21,12 +21,24 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow cron requests with a valid secret to bypass auth checks
+  // Cron routes are only accessible via CRON_SECRET bearer token.
+  // Fail closed: no fallback to session auth, preventing OAuth users from
+  // triggering cron jobs directly.
   if (pathname.startsWith("/api/cron")) {
     const cronSecret = process.env.CRON_SECRET?.trim();
-    if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+    if (!cronSecret) {
+      return NextResponse.json(
+        { error: "Forbidden", message: "Cron routes are not configured" },
+        { status: 403 }
+      );
+    }
+    if (authHeader === `Bearer ${cronSecret}`) {
       return NextResponse.next();
     }
+    return NextResponse.json(
+      { error: "Unauthorized", message: "Invalid cron secret" },
+      { status: 401 }
+    );
   }
 
   // Create response to pass to supabase client
