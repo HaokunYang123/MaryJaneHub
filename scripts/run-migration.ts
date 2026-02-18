@@ -15,6 +15,7 @@ dotenv.config({ path: ".env.local" });
 import { Client } from "pg";
 import * as fs from "fs";
 import * as path from "path";
+import { requireSafeEnv } from "./lib/check-env";
 
 function getDatabaseUrl(): string {
   // Check various possible env var names (including the typo)
@@ -163,12 +164,13 @@ async function runSqlQuery(sql: string): Promise<void> {
 
 async function main() {
   const args = process.argv.slice(2);
+  requireSafeEnv(args, "run-migration");
 
-  if (args.length === 0) {
+  if (args.filter((a) => !a.startsWith("--env")).length === 0) {
     console.log("Usage:");
-    console.log("  npm run db:migrate <migration-file.sql>  # Run a migration");
-    console.log("  npm run db:migrate --verify              # Verify last migration");
-    console.log("  npm run db:migrate --query 'SELECT ...'  # Run a query");
+    console.log("  npm run db:migrate <migration-file.sql> --env=local|staging");
+    console.log("  npm run db:migrate --verify --env=local|staging");
+    console.log("  npm run db:migrate --query 'SELECT ...' --env=local|staging");
     process.exit(0);
   }
 

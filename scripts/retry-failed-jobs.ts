@@ -15,9 +15,11 @@ dotenv.config({ path: ".env.local" });
 
 import { getSupabase } from "../lib/supabase/client";
 import { runWorker } from "../lib/queue/worker";
+import { requireSafeEnv } from "./lib/check-env";
 
 async function main() {
   const args = process.argv.slice(2);
+  requireSafeEnv(args, "retry-failed-jobs");
   const dryRun = args.includes("--dry-run");
 
   const supabase = getSupabase();

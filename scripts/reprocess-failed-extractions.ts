@@ -15,9 +15,12 @@ import { extractDocument } from "../lib/gemini/extract-document";
 import { ensureFieldEvidence } from "../lib/workflow/field-evidence";
 import { analyzeDocument } from "../lib/workflow/review-flags";
 import { getDocumentLayout } from "../lib/supabase/document-layouts";
+import { requireSafeEnv } from "./lib/check-env";
 
 async function main(): Promise<void> {
-  const dryRun = process.argv.includes("--dry-run");
+  const args = process.argv.slice(2);
+  requireSafeEnv(args, "reprocess-failed-extractions");
+  const dryRun = args.includes("--dry-run");
   const supabase = getSupabase();
 
   console.log("=".repeat(60));

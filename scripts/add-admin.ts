@@ -14,18 +14,21 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 import { getSupabase } from "../lib/supabase/client";
+import { requireSafeEnv } from "./lib/check-env";
 
 async function main() {
   const args = process.argv.slice(2);
+  requireSafeEnv(args, "add-admin");
 
-  if (args.length === 0) {
-    console.log("Usage: npm run add:admin <email> [name]");
-    console.log("Example: npm run add:admin admin@company.com 'Admin User'");
+  if (args.filter((a) => !a.startsWith("--")).length === 0) {
+    console.log("Usage: npm run add:admin <email> [name] --env=local|staging");
+    console.log("Example: npm run add:admin admin@company.com 'Admin User' --env=local");
     process.exit(1);
   }
 
-  const email = args[0];
-  const name = args[1] || null;
+  const positional = args.filter((a) => !a.startsWith("--"));
+  const email = positional[0] ?? "";
+  const name = positional[1] || null;
 
   // Validate email format
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
