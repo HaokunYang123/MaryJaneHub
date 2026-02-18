@@ -257,6 +257,10 @@ export async function syncDocumentWithDeps(
   // the QB API call fails or an early validation error occurs.
   let claimedIdempotencyKey: string | null = null;
   let slotFulfilled = false;
+  // Set to true once the QB API has confirmed a bill ID exists.
+  // If fulfillIdempotencySlot() then fails, we must NOT abandon the slot —
+  // the slot keeps the pending row which blocks future duplicate syncs.
+  let hasQbBillId = false;
 
   try {
     // Get document
@@ -541,6 +545,9 @@ export async function syncDocumentWithDeps(
         error: "QuickBooks createBill response missing bill ID",
       };
     }
+    // QB Bill now exists in QuickBooks — do not abandon the slot even if
+    // fulfillIdempotencySlot() later fails; the pending row acts as a guard.
+    hasQbBillId = true;
 
     let createdBill: Awaited<ReturnType<typeof getBill>>;
     try {
@@ -653,9 +660,15 @@ export async function syncDocumentWithDeps(
       error: errorMessage,
     };
   } finally {
-    // If we claimed the slot but never fulfilled it (validation failure, QB API error,
-    // or unhandled exception), abandon it so a future retry can claim and try again.
-    if (claimedIdempotencyKey && !slotFulfilled) {
+    // Abandon the slot only if:
+    // - we claimed it, AND
+    // - we never fulfilled it, AND
+    // - no QB Bill was created (hasQbBillId = false).
+    //
+    // If a QB Bill was created but fulfillIdempotencySlot() failed, we leave
+    // the pending row in place — it acts as a guard preventing a future sync
+    // from creating a duplicate bill. The row can be manually fulfilled later.
+    if (claimedIdempotencyKey && !slotFulfilled && !hasQbBillId) {
       await abandonIdempotencySlot(supabase, claimedIdempotencyKey).catch(() => {});
     }
   }

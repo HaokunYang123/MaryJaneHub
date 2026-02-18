@@ -3,8 +3,10 @@ import { createHash } from "crypto";
 export type QbIdempotencyRecord = {
   document_id: string;
   qb_object_type: string;
-  qb_object_id: string;
+  qb_object_id: string | null;
   idempotency_key: string;
+  /** "pending" while QB API is in flight; "complete" once fulfilled. Added in migration 016. */
+  status?: "pending" | "complete";
   created_at?: string;
 };
 

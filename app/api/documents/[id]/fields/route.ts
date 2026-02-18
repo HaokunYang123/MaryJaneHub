@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase/client";
-import { verifyAuth } from "@/lib/auth/api-middleware";
+import { verifyAuth, requireRole } from "@/lib/auth/api-middleware";
 import {
   ensureFieldEvidence,
   getEditableFieldsForExtraction,
@@ -111,7 +111,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-  const authResult = await verifyAuth(request);
+  const authResult = await requireRole(request, "user");
   if (!authResult.authenticated) {
     return authResult.response!;
   }

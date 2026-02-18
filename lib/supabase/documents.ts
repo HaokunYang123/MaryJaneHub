@@ -189,8 +189,8 @@ export async function updateDocumentGcsInfo(
   documentId: string,
   gcsInfo: {
     gcsPath: string;
-    gcsBucket: string;
-    gcsObject: string;
+    gcsBucket?: string;
+    gcsObject?: string;
     gcsGeneration?: string;
     gcsHashType?: "md5" | "crc32c";
     gcsHashValue?: string;

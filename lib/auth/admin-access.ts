@@ -58,15 +58,16 @@ export async function requireAdminAccessForRequest(
   const expectedSecret = resolveAdminSecret();
   const providedSecret = request.headers.get(ADMIN_SECRET_HEADER)?.trim() || null;
 
-  if (expectedSecret && providedSecret) {
+  if (expectedSecret !== null) {
+    // ADMIN_SECRET is configured — enforce secret-only, no session fallback.
+    // Mirrors the same pattern in lib/auth/api-middleware.ts requireAdmin().
+    if (providedSecret === null) {
+      return { ok: false, status: 401, message: "Admin secret required" };
+    }
     if (safeEqualSecret(providedSecret, expectedSecret)) {
       return { ok: true, user: buildSecretUser() };
     }
-    return {
-      ok: false,
-      status: 401,
-      message: "Invalid admin secret",
-    };
+    return { ok: false, status: 401, message: "Invalid admin secret" };
   }
 
   return requireAdminAccess();
