@@ -58,7 +58,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       throw new Error("Failed to save tokens to database");
     }
 
-    console.log(`QuickBooks connected successfully. Realm ID: ${tokens.realm_id}`);
+    console.log("QuickBooks connected successfully.");
 
     // Clear the state cookie and redirect to success page
     const response = NextResponse.redirect(
