@@ -20,20 +20,24 @@ type DocumentRow = {
   gcs_hash_value?: string | null;
 };
 
+type QbIdempotencyRow = {
+  document_id: string;
+  qb_object_type: string;
+  qb_object_id: string | null;
+  idempotency_key: string;
+  status: "pending" | "complete";
+};
+
 type SupabaseStub = {
   data: {
     documents: Map<string, DocumentRow>;
-    qbIdempotency: Map<string, {
-      document_id: string;
-      qb_object_type: string;
-      qb_object_id: string;
-      idempotency_key: string;
-    }>;
+    qbIdempotency: Map<string, QbIdempotencyRow>;
     auditLogs: Array<Record<string, unknown>>;
   };
   from: (table: string) => {
     select: (fields: string) => unknown;
     eq: (column: string, value: string) => unknown;
+    delete: () => unknown;
     single: () => Promise<{ data: DocumentRow | null; error: { message: string } | null }>;
     maybeSingle: () => Promise<{ data: Record<string, unknown> | null; error: { message: string } | null }>;
     update: (data: Record<string, unknown>) => unknown;
@@ -67,12 +71,7 @@ function buildInvoiceEvidence(
 
 function createSupabaseStub(options?: { forceDuplicateInsert?: boolean; forcedQbId?: string }): SupabaseStub {
   const documents = new Map<string, DocumentRow>();
-  const qbIdempotency = new Map<string, {
-    document_id: string;
-    qb_object_type: string;
-    qb_object_id: string;
-    idempotency_key: string;
-  }>();
+  const qbIdempotency = new Map<string, QbIdempotencyRow>();
   const auditLogs: Array<Record<string, unknown>> = [];
 
   const forceDuplicateInsert = options?.forceDuplicateInsert ?? false;
@@ -85,6 +84,7 @@ function createSupabaseStub(options?: { forceDuplicateInsert?: boolean; forcedQb
         table,
         filters: [] as Array<{ column: string; value: string }>,
         updateData: null as Record<string, unknown> | null,
+        operation: null as string | null,
       };
 
       const builder = {
@@ -95,8 +95,14 @@ function createSupabaseStub(options?: { forceDuplicateInsert?: boolean; forcedQb
           state.updateData = data;
           return builder;
         },
+        delete() {
+          state.operation = "delete";
+          return builder;
+        },
         eq(column: string, value: string) {
           state.filters.push({ column, value });
+
+          // Handle UPDATE (applies when updateData is set)
           if (state.updateData) {
             if (state.table === "documents") {
               const docId = state.filters.find((f) => f.column === "id")?.value;
@@ -104,9 +110,33 @@ function createSupabaseStub(options?: { forceDuplicateInsert?: boolean; forcedQb
                 const doc = documents.get(docId)!;
                 documents.set(docId, { ...doc, ...state.updateData } as DocumentRow);
               }
+            } else if (state.table === "qb_idempotency") {
+              // fulfillIdempotencySlot: .update({qb_object_id, status}).eq("idempotency_key", key)
+              const key = state.filters.find((f) => f.column === "idempotency_key")?.value;
+              if (key && qbIdempotency.has(key)) {
+                const record = qbIdempotency.get(key)!;
+                qbIdempotency.set(key, { ...record, ...state.updateData } as QbIdempotencyRow);
+              }
             }
             return Promise.resolve({ error: null });
           }
+
+          // Handle DELETE for qb_idempotency
+          // abandonIdempotencySlot chains two .eq() calls; execute when both filters are present.
+          if (state.operation === "delete" && state.table === "qb_idempotency") {
+            const keyFilter = state.filters.find((f) => f.column === "idempotency_key")?.value;
+            const statusFilter = state.filters.find((f) => f.column === "status")?.value;
+            if (keyFilter && statusFilter) {
+              const record = qbIdempotency.get(keyFilter);
+              if (record && record.status === statusFilter) {
+                qbIdempotency.delete(keyFilter);
+              }
+              return Promise.resolve({ error: null });
+            }
+            // First filter in chain — keep building
+            return builder;
+          }
+
           return builder;
         },
         async single() {
@@ -139,19 +169,23 @@ function createSupabaseStub(options?: { forceDuplicateInsert?: boolean; forcedQb
               return { error: { code: "23505", message: "duplicate key" } };
             }
             if (forceDuplicateInsert) {
+              // Simulate race: another request already completed — pre-seed a complete record.
               qbIdempotency.set(key, {
                 document_id: String(record.document_id),
                 qb_object_type: String(record.qb_object_type),
                 qb_object_id: forcedQbId,
                 idempotency_key: key,
+                status: "complete",
               });
               return { error: { code: "23505", message: "duplicate key" } };
             }
+            // Normal path: insert pending slot (qb_object_id is null until fulfilled).
             qbIdempotency.set(key, {
               document_id: String(record.document_id),
               qb_object_type: String(record.qb_object_type),
-              qb_object_id: String(record.qb_object_id),
+              qb_object_id: null,
               idempotency_key: key,
+              status: "pending",
             });
             return { error: null };
           }
@@ -277,8 +311,10 @@ async function run(): Promise<void> {
     if (result.qbBillId !== "QB-RACE") {
       failures.push(`expected race sync qbBillId QB-RACE, got ${result.qbBillId}`);
     }
-    if (createCalls !== 1) {
-      failures.push(`expected createBill to be called once in race, got ${createCalls}`);
+    // With reservation pattern, the race loser sees an existing complete record and returns
+    // early without calling createBill. The winner already created the bill.
+    if (createCalls !== 0) {
+      failures.push(`expected createBill not to be called in race (race winner already created bill), got ${createCalls}`);
     }
   }
 
