@@ -62,11 +62,6 @@ function hasSupabaseEnv(): boolean {
   );
 }
 
-function ensureSupabaseServiceKey(): void {
-  if (!process.env.SUPABASE_SERVICE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    process.env.SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  }
-}
 
 function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex");
@@ -214,7 +209,7 @@ function mergePayload(base: AuditPayload, patch: Partial<AuditPayload>): AuditPa
 async function writeAuditRow(requestId: string, payload: AuditPayload): Promise<void> {
   try {
     if (!hasSupabaseEnv()) return;
-    ensureSupabaseServiceKey();
+
     const supabase = getSupabase();
     const sanitized = sanitizeAuditPayloadForTest(payload);
     await supabase
@@ -234,7 +229,7 @@ async function writeAuditRow(requestId: string, payload: AuditPayload): Promise<
 async function insertAuditRow(payload: AuditPayload): Promise<void> {
   try {
     if (!hasSupabaseEnv()) return;
-    ensureSupabaseServiceKey();
+
     const supabase = getSupabase();
     const sanitized = sanitizeAuditPayloadForTest(payload);
     await supabase.from("audit_logs").insert({
