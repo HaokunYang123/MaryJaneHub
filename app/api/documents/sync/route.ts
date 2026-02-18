@@ -3,7 +3,7 @@ import { syncDocument } from "@/lib/workflow/sync-to-quickbooks";
 import { getDocumentById } from "@/lib/supabase/documents";
 import { convertInvoiceToBill, canConvertToBill } from "@/lib/quickbooks/invoice-to-bill";
 import type { InvoiceExtraction } from "@/lib/gemini/types";
-import { verifyAuth } from "@/lib/auth/api-middleware";
+import { requireRole } from "@/lib/auth/api-middleware";
 import { evaluatePreSyncChecklist, type PreSyncChecklistResult } from "@/lib/workflow/pre-sync-checklist";
 import {
   applySyncSnapshotToInvoice,
@@ -31,7 +31,7 @@ import {
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const authResult = await verifyAuth(request);
+    const authResult = await requireRole(request, "user");
     if (!authResult.authenticated) {
       return authResult.response!;
     }

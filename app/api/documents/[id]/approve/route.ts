@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { approveDocument } from "@/lib/workflow/approve-document";
 import { getDocumentById } from "@/lib/supabase/documents";
-import { verifyAuth } from "@/lib/auth/api-middleware";
+import { requireRole } from "@/lib/auth/api-middleware";
 import { getSupabase } from "@/lib/supabase/client";
 
 /**
@@ -18,7 +18,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   try {
-    const authResult = await verifyAuth(request);
+    const authResult = await requireRole(request, "user");
     if (!authResult.authenticated) {
       return authResult.response!;
     }
