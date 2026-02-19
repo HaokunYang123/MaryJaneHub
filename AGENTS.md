@@ -1,85 +1,28 @@
-# Project Management Protocol
+# Agent Working Conventions
 
-## Working Conventions
+> This file contains operational instructions for AI agents. Project facts live in `PROJECT.md`, `sections/`, and `decisions/` — those are the authoritative sources.
 
-- **Language**: Conversation in English, all code/comments/logs in English only
-- **No Chinese in code**: Scripts, comments, console output, documentation files must be English
+## Workflow
 
-## Purpose
+This project uses a structured PLAN → BUILD → REVIEW workflow:
 
-These docs are the project's persistent memory. They ensure continuity across sessions—any context worth preserving goes here, not just in conversation. When we return, we pick up exactly where we left off.
+- **PROJECT.md** is the source of truth for goal, tech stack, sections table, and constraints
+- **sections/*.md** define each work unit: Intent, Contract, Proof, Depends on
+- **decisions/ADR-*.md** record cross-section architectural decisions
+- **CLAUDE.md** contains only operational instructions (commands, conventions)
 
-**All docs are living documents.** When we discuss and agree on changes—whether to workflow, plans, or technical approach—update the relevant file immediately.
+When building or reviewing, always read the relevant section and its dependencies first.
 
-## Files
+## Model Delegation
 
-- `AGENTS.md` (root) — Working conventions, preferences, project-specific rules. Update when new agreements are made.
-- `/docs/overview.md` — Scope, stack, architecture, phase list. Update rarely. <800 words.
-- `/docs/phase-current.md` — Active tasks with acceptance criteria. Update after each task.
-- `/docs/decisions.md` — Technical decisions and key learnings. Append-only, newest first.
-
-## Formats
-
-### overview.md
-
-```markdown
-# [Project Name]
-## What
-[One paragraph]
-## Stack
-[List]
-## Architecture
-[Brief or ASCII]
-## Phases
-- [ ] Phase 1: ...
-```
-
-### phase-current.md
-
-```markdown
-# Phase N: [Name]
-## Goal
-[One sentence]
-## Tasks
-- [ ] Task — [acceptance criteria]
-## Progress
-[Task]: Done/Blocked — [one-line note]
-## Next
-[Entry point for next session]
-```
-
-### decisions.md
-
-```markdown
-## YYYY-MM-DD: [Title]
-Context: ... | Decision: ... | Reason: ...
-```
-
-Also log non-obvious learnings (e.g., "X library doesn't support Y") to avoid repeating dead ends.
+- **Opus** — planning, architecture, section design, complex decisions, review
+- **Sonnet** — implementation (BUILD phase), routine code changes
+- **Haiku** — exploration, file search, quick lookups
 
 ## Rules
 
-- On "continue"/"resume": read AGENTS.md, overview, and phase-current; report status; then proceed
-- Update phase-current after each task, not at session end
-- **When blocked: stop, explain the problem and options to user, wait for confirmation. Do not switch approach autonomously.**
-- On confirmed pivot: write to decisions.md first, then update phase-current
-- **On phase complete: rename phase-current.md to phase-N-done.md, create new phase-current.md, check off completed phase in overview.md**
-- User may adjust tasks mid-phase through discussion; update phase-current accordingly
-- When discussion establishes new conventions or preferences: update AGENTS.md immediately
-- **After corrections or mistakes: update AGENTS.md with the lesson to prevent recurrence**
-- When manually resetting `processing_jobs` from `processing` to `pending`, also clear `steps_completed` (and related step state) to avoid "File buffer not available for processing" on retry
-- For `@google/genai` structured JSON calls, do not force API version `v1` unless verified; default/beta endpoints are required for `responseMimeType` + `responseSchema` support in this project
-- For each user command, if it is not a good step at the current time, pause and confirm with the user, give a simple direct reason why, and provide a suggested next step.
-- Record any insight or constraint that would be useful in future sessions
-- Don't echo file contents unless asked
-- Keep entries concise: one line per task, one sentence per decision
-- Keep `/docs/ops/drive-management-strategy.md` as the living note for Google Drive AI-management discussions; update it continuously as requirements/decisions evolve.
-- Keep `/docs/ops/founder-todo.md` as the owner reminder checklist.
-- Keep `/docs/ops/collaboration-boundary.md` as the temporary multi-developer boundary contract while tracks are split.
-- Whenever a critical user-side action is identified, add it to `/docs/ops/founder-todo.md` immediately in simple checkbox format.
-- Keep founder TODO entries concise and readable (short action lines only, no long explanations).
-- When an item is completed, mark it done by checking the same TODO item instead of rewriting history.
-- For Drive AI-management rollout, implement backend APIs/guards first; frontend is optional for controls and can be added after backend behavior is stable.
-- For global rails/drawers, keep header z-index above content overlays and use bounded shell overflow (`flex-1 min-h-0 overflow-hidden`) to prevent header overlap regressions.
-- While collaboration boundary is active, any banking-track AI session must read `/docs/ops/collaboration-boundary.md` first and stay within allowed banking scope only.
-- Remove the temporary collaboration-boundary rules from AGENTS only after both tracks are joined and integration is validated.
+- When blocked: stop, explain the problem, wait for confirmation. Do not switch approach autonomously.
+- Update section status and PROJECT.md after completing work.
+- Don't echo file contents unless asked.
+- Keep entries concise.
+- Record operational insights in this file; record project facts in sections or ADRs.
